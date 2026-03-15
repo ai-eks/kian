@@ -1,0 +1,694 @@
+import path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const state = vi.hoisted(() => ({
+  workspaceRoot: "/tmp/kian-agent-delegation",
+  appendMessage: vi.fn(),
+  chatSend: vi.fn(),
+  createSessionAssistantReplyStreamer: vi.fn(),
+  createAgentAssistantMirrorStreamer: vi.fn(),
+  assistantMirrorPushEvent: vi.fn(),
+  assistantMirrorFinalize: vi.fn(),
+  listProjects: vi.fn(),
+  createChatSession: vi.fn(),
+  getProjectById: vi.fn(),
+  setChatSessionSdkSessionId: vi.fn(),
+  getModel: vi.fn(),
+  createAgentSession: vi.fn(),
+  continueRecent: vi.fn(),
+  createSessionManager: vi.fn(),
+  getClaudeStatus: vi.fn(),
+  getMcpServers: vi.fn(),
+  getAgentSystemPrompt: vi.fn(),
+  getClaudeSecret: vi.fn(),
+  listActiveSkillsForScope: vi.fn(),
+  buildSessionSystemPrompt: vi.fn(),
+  buildMcpServerSignature: vi.fn(),
+  createMcpRuntime: vi.fn(),
+  sendCustomMessage: vi.fn(),
+  followUp: vi.fn(),
+  customTools: [] as Array<{
+    name?: string;
+    handler?: (...args: any[]) => Promise<any>;
+  }>,
+  sendCustomMessageCallCount: 0,
+  prompt: vi.fn(),
+  sendUserMessage: vi.fn(),
+  sessionListener: undefined as ((event: { type: string }) => void) | undefined,
+}));
+
+vi.mock("electron", () => ({
+  app: {
+    isPackaged: false,
+  },
+}));
+
+vi.mock("@mariozechner/pi-ai", () => ({
+  getModel: (...args: unknown[]) => state.getModel(...args),
+  Type: {
+    Object: (value: unknown) => value,
+    Optional: (value: unknown) => value,
+    String: (value: unknown) => value,
+    Union: (value: unknown) => value,
+    Literal: (value: unknown) => value,
+    Array: (value: unknown) => value,
+  },
+}));
+
+vi.mock("@mariozechner/pi-coding-agent", () => ({
+  AuthStorage: {
+    inMemory: () => ({
+      setRuntimeApiKey: vi.fn(),
+    }),
+  },
+  createAgentSession: (...args: unknown[]) => state.createAgentSession(...args),
+  createCodingTools: () => [],
+  DefaultResourceLoader: class {
+    private readonly options: {
+      systemPromptOverride?: () => string;
+    };
+
+    constructor(options: { systemPromptOverride?: () => string }) {
+      this.options = options;
+    }
+
+    async reload(): Promise<void> {
+      this.options.systemPromptOverride?.();
+    }
+
+    getSkills(): { skills: never[] } {
+      return { skills: [] };
+    }
+  },
+  SessionManager: {
+    continueRecent: (...args: unknown[]) => state.continueRecent(...args),
+    create: (...args: unknown[]) => state.createSessionManager(...args),
+  },
+}));
+
+vi.mock("../../electron/main/services/workspacePaths", () => ({
+  get WORKSPACE_ROOT() {
+    return state.workspaceRoot;
+  },
+  get INTERNAL_ROOT() {
+    return path.join(state.workspaceRoot, ".kian");
+  },
+}));
+
+vi.mock("../../electron/main/services/repositoryService", () => ({
+  repositoryService: {
+    appendMessage: (...args: unknown[]) => state.appendMessage(...args),
+    listProjects: (...args: unknown[]) => state.listProjects(...args),
+    createChatSession: (...args: unknown[]) => state.createChatSession(...args),
+    getProjectById: (...args: unknown[]) => state.getProjectById(...args),
+    setChatSessionSdkSessionId: (...args: unknown[]) =>
+      state.setChatSessionSdkSessionId(...args),
+  },
+}));
+
+vi.mock("../../electron/main/services/settingsService", () => ({
+  settingsService: {
+    getClaudeStatus: (...args: unknown[]) => state.getClaudeStatus(...args),
+    getMcpServers: (...args: unknown[]) => state.getMcpServers(...args),
+    getAgentSystemPrompt: (...args: unknown[]) =>
+      state.getAgentSystemPrompt(...args),
+    getClaudeSecret: (...args: unknown[]) => state.getClaudeSecret(...args),
+  },
+}));
+
+vi.mock("../../electron/main/services/skillService", () => ({
+  skillService: {
+    listActiveSkillsForScope: (...args: unknown[]) =>
+      state.listActiveSkillsForScope(...args),
+  },
+}));
+
+vi.mock("../../electron/main/services/agentPrompt", () => ({
+  buildSessionSystemPrompt: (...args: unknown[]) =>
+    state.buildSessionSystemPrompt(...args),
+}));
+
+vi.mock("../../electron/main/services/appOperationMcpServer", () => ({
+  createAppOperationTools: () => [],
+}));
+
+vi.mock("../../electron/main/services/builtinMcpServer", () => ({
+  createBuiltinTools: () => [],
+}));
+
+vi.mock("../../electron/main/services/customTools", () => ({
+  toToolDefinition: (tool: unknown) => tool,
+}));
+
+vi.mock("../../electron/main/services/chatEvents", () => ({
+  chatEvents: {
+    emitStream: vi.fn(),
+  },
+}));
+
+vi.mock("../../electron/main/services/logger", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+vi.mock("../../electron/main/services/mediaMarkdown", () => ({
+  buildExtendedMarkdown: vi.fn(),
+  buildMediaMarkdown: vi.fn(),
+  detectAttachmentMediaKind: vi.fn(),
+  normalizeMediaMarkdownInText: (text: string) => text,
+  resolveAttachmentAbsolutePath: vi.fn(),
+}));
+
+vi.mock("../../electron/main/services/mcpRuntime", () => ({
+  buildMcpServerSignature: (...args: unknown[]) =>
+    state.buildMcpServerSignature(...args),
+  createMcpRuntime: (...args: unknown[]) => state.createMcpRuntime(...args),
+}));
+
+vi.mock("../../electron/main/services/chatService", () => ({
+  chatService: {
+    send: (...args: unknown[]) => state.chatSend(...args),
+  },
+}));
+
+vi.mock("../../electron/main/services/chatChannelService", () => ({
+  chatChannelService: {
+    createSessionAssistantReplyStreamer: (...args: unknown[]) =>
+      state.createSessionAssistantReplyStreamer(...args),
+    createAgentAssistantMirrorStreamer: (...args: unknown[]) =>
+      state.createAgentAssistantMirrorStreamer(...args),
+  },
+}));
+
+describe("agentService delegation reporting", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    state.sessionListener = undefined;
+    state.appendMessage.mockReset().mockResolvedValue(undefined);
+    state.chatSend.mockReset().mockResolvedValue({
+      assistantMessage: "主 Agent 已处理回报",
+      toolActions: [],
+    });
+    state.createSessionAssistantReplyStreamer.mockReset().mockReturnValue(null);
+    state.assistantMirrorPushEvent.mockReset();
+    state.assistantMirrorFinalize.mockReset().mockResolvedValue(undefined);
+    state.createAgentAssistantMirrorStreamer.mockReset().mockReturnValue({
+      pushEvent: (...args: unknown[]) =>
+        state.assistantMirrorPushEvent(...args),
+      finalize: (...args: unknown[]) => state.assistantMirrorFinalize(...args),
+    });
+    state.listProjects.mockReset().mockResolvedValue([]);
+    state.createChatSession.mockReset().mockResolvedValue({
+      id: "sub-session-1",
+    });
+    state.getProjectById.mockReset().mockResolvedValue({
+      id: "agent-a",
+      name: "Agent A",
+    });
+    state.setChatSessionSdkSessionId.mockReset().mockResolvedValue(undefined);
+    state.getModel.mockReset().mockReturnValue({
+      provider: "anthropic",
+      modelId: "claude-test",
+    });
+    state.continueRecent.mockReset().mockReturnValue({
+      buildSessionContext: () => ({ model: null }),
+    });
+    state.createSessionManager.mockReset().mockReturnValue({
+      buildSessionContext: () => ({ model: null }),
+    });
+    state.getClaudeStatus.mockReset().mockResolvedValue({
+      allEnabledModels: [{ provider: "anthropic", modelId: "claude-test" }],
+      providers: {
+        anthropic: {
+          apiKey: "test-key",
+        },
+      },
+    });
+    state.getMcpServers.mockReset().mockResolvedValue([]);
+    state.getAgentSystemPrompt.mockReset().mockResolvedValue("system prompt");
+    state.getClaudeSecret.mockReset().mockResolvedValue("");
+    state.listActiveSkillsForScope.mockReset().mockResolvedValue([]);
+    state.buildSessionSystemPrompt
+      .mockReset()
+      .mockImplementation((prompt) => prompt);
+    state.buildMcpServerSignature.mockReset().mockReturnValue("mcp-signature");
+    state.createMcpRuntime.mockReset().mockResolvedValue({
+      tools: [],
+      warnings: [],
+      dispose: vi.fn().mockResolvedValue(undefined),
+    });
+    state.customTools = [];
+    state.sendCustomMessageCallCount = 0;
+    state.sendCustomMessage.mockReset().mockImplementation(async (...args) => {
+      state.sendCustomMessageCallCount += 1;
+      state.sessionListener?.({ type: "agent_end" });
+      return args;
+    });
+    state.followUp.mockReset().mockResolvedValue(undefined);
+    state.prompt.mockReset().mockResolvedValue(undefined);
+    state.sendUserMessage.mockReset().mockResolvedValue(undefined);
+    state.createAgentSession.mockReset().mockImplementation(async (options) => {
+      state.customTools = ((options as { customTools?: Array<any> })
+        .customTools ?? []) as Array<{
+        name?: string;
+        handler?: (...args: any[]) => Promise<any>;
+      }>;
+      return {
+        session: {
+          sessionId: "sdk-session-1",
+          subscribe: (listener: (event: { type: string }) => void) => {
+            state.sessionListener = listener;
+            return () => {
+              state.sessionListener = undefined;
+            };
+          },
+          setThinkingLevel: vi.fn(),
+          sendCustomMessage: (...args: unknown[]) =>
+            state.sendCustomMessage(...args),
+          followUp: (...args: unknown[]) => state.followUp(...args),
+          prompt: (...args: unknown[]) => state.prompt(...args),
+          sendUserMessage: (...args: unknown[]) =>
+            state.sendUserMessage(...args),
+        },
+      };
+    });
+  });
+
+  it("marks auto report as completed when tool output can be forwarded", async () => {
+    const { buildAutomaticDelegationReport } =
+      await import("../../electron/main/services/agentService");
+
+    const report = buildAutomaticDelegationReport({
+      reason: "completed",
+      finalMessage: "已处理请求，但未收到 Agent 文本回复。",
+      toolOutputs: ["创建 docs/summary.md", "产出最终结论"],
+    });
+
+    expect(report.status).toBe("completed");
+    expect(report.result).toContain("Agent 未输出最终文字说明");
+    expect(report.result).toContain("1. 创建 docs/summary.md");
+    expect(report.result).toContain("2. 产出最终结论");
+  });
+
+  it("marks empty missing-call auto report as failed", async () => {
+    const { buildAutomaticDelegationReport } =
+      await import("../../electron/main/services/agentService");
+
+    const report = buildAutomaticDelegationReport({
+      reason: "completed",
+      finalMessage: "已处理请求，但未收到 Agent 文本回复。",
+      toolOutputs: [],
+    });
+
+    expect(report.status).toBe("failed");
+    expect(report.result).toContain("已处理请求，但未收到 Agent 文本回复。");
+  });
+
+  it("returns a neutral final message when only tool output is available", async () => {
+    const { agentService } =
+      await import("../../electron/main/services/agentService");
+
+    state.prompt.mockReset().mockImplementation(async () => {
+      state.sessionListener?.({
+        type: "tool_execution_end",
+        toolCallId: "tool-1",
+        toolName: "writeDocument",
+        result: {
+          content: [{ type: "text", text: "已写入 docs/summary.md" }],
+        },
+      });
+      state.sessionListener?.({ type: "agent_end" });
+    });
+
+    const result = await agentService.send({
+      scope: { type: "main" },
+      module: "main",
+      sessionId: "main-session",
+      requestId: "main-request-tool-only",
+      message: "只需要执行工具",
+    });
+
+    expect(result.assistantMessage).toBe("已处理完成。");
+  });
+
+  it("surfaces assistant error messages emitted at message_end", async () => {
+    const { agentService } =
+      await import("../../electron/main/services/agentService");
+
+    state.prompt.mockReset().mockImplementation(async () => {
+      state.sessionListener?.({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [],
+          errorMessage: "模型调用失败",
+        },
+      });
+      state.sessionListener?.({ type: "agent_end" });
+    });
+
+    const result = await agentService.send({
+      scope: { type: "main" },
+      module: "main",
+      sessionId: "main-session",
+      requestId: "main-request-assistant-error",
+      message: "测试模型失败透传",
+    });
+
+    expect(result.assistantMessage).toBe("处理失败：模型调用失败");
+  });
+
+  it("does not expose callMainAgent for delegated project sessions", async () => {
+    const { createDelegationTools } =
+      await import("../../electron/main/services/agentService");
+
+    const tools = createDelegationTools({
+      scope: { type: "project", projectId: "agent-a" },
+      runtime: {
+        chatSessionId: "session-1",
+        delegationContext: {
+          delegationId: "delegation-1",
+          mainSessionId: "main-session",
+          source: "main",
+          projectId: "agent-a",
+          projectName: "Agent A",
+        },
+        delegationReportState: { reported: false },
+      },
+    });
+
+    expect(tools.find((item) => item.name === "callMainAgent")).toBeUndefined();
+  });
+
+  it("keeps an active main-agent request open for merged follow-up turns", async () => {
+    const { agentService, deliverDelegationReportToMainAgent } =
+      await import("../../electron/main/services/agentService");
+
+    let releaseInitialTurn: (() => void) | undefined;
+    state.prompt.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        releaseInitialTurn = resolve;
+      });
+      setTimeout(() => {
+        state.sessionListener?.({
+          type: "message_update",
+          assistantMessageEvent: {
+            type: "text_delta",
+            delta: "主 Agent 初始回复",
+          },
+        });
+        state.sessionListener?.({ type: "agent_end" });
+      }, 0);
+    });
+    state.followUp.mockImplementation(async () => {
+      setTimeout(() => {
+        state.sessionListener?.({
+          type: "message_update",
+          assistantMessageEvent: {
+            type: "text_delta",
+            delta: "，已合并子智能体 回报",
+          },
+        });
+        state.sessionListener?.({ type: "agent_end" });
+      }, 0);
+    });
+
+    const sendPromise = agentService.send({
+      scope: { type: "main" },
+      module: "main",
+      sessionId: "main-session",
+      requestId: "main-request-1",
+      message: "请处理并等待子智能体 回报",
+    });
+
+    await vi.waitFor(() => {
+      expect(state.prompt).toHaveBeenCalledTimes(1);
+      expect(state.sessionListener).toBeTypeOf("function");
+    });
+
+    await deliverDelegationReportToMainAgent({
+      delegationContext: {
+        delegationId: "delegation-1",
+        mainSessionId: "main-session",
+        source: "main",
+        projectId: "agent-a",
+        projectName: "Agent A",
+      },
+      sourceProjectId: "agent-a",
+      sourceProjectName: "Agent A",
+      status: "completed",
+      result: "子智能体 已完成",
+      delegationReportState: { reported: false },
+    });
+
+    releaseInitialTurn?.();
+
+    const result = await sendPromise;
+
+    expect(state.followUp).toHaveBeenCalledTimes(1);
+    expect(state.followUp.mock.calls[0]?.[0]).toContain("子智能体 已完成");
+    expect(result.assistantMessage).toContain("主 Agent 初始回复");
+    expect(result.assistantMessage).toContain("已合并子智能体 回报");
+  });
+
+  it("retries main-agent processing without appending the report twice", async () => {
+    const { deliverDelegationReportToMainAgent } =
+      await import("../../electron/main/services/agentService");
+
+    const delegationReportState = {
+      reported: false,
+      appendedReport: {
+        status: "completed" as const,
+        result: "这是首次写入的回报",
+      },
+    };
+
+    await deliverDelegationReportToMainAgent({
+      delegationContext: {
+        delegationId: "delegation-1",
+        mainSessionId: "main-session",
+        source: "main",
+        projectId: "agent-a",
+        projectName: "Agent A",
+      },
+      sourceProjectId: "agent-a",
+      sourceProjectName: "Agent A",
+      status: "failed",
+      result: "不应覆盖已写入的回报",
+      delegationReportState,
+    });
+
+    expect(state.appendMessage).not.toHaveBeenCalled();
+    expect(state.chatSend).toHaveBeenCalledTimes(1);
+    expect(state.chatSend.mock.calls[0]?.[0]).toMatchObject({
+      sessionId: "main-session",
+      requestId: "main-report-delegation-1",
+    });
+    expect(state.chatSend.mock.calls[0]?.[0].message).toContain(
+      "这是首次写入的回报",
+    );
+    expect(state.chatSend.mock.calls[0]?.[0].message).not.toContain(
+      "不应覆盖已写入的回报",
+    );
+    expect(delegationReportState.reported).toBe(true);
+  });
+
+  it("dispatches delegation tasks to sub agents without persisting a duplicate user message", async () => {
+    state.listProjects.mockResolvedValue([
+      {
+        id: "agent-a",
+        name: "Agent A",
+        updatedAt: "2026-03-09T10:00:00.000Z",
+      },
+    ]);
+
+    const { createDelegationTools } =
+      await import("../../electron/main/services/agentService");
+
+    const [tool] = createDelegationTools({
+      scope: { type: "main" },
+      runtime: {
+        chatSessionId: "main-session",
+      },
+    }).filter((item) => item.name === "callSubAgent");
+
+    const result = await tool.handler({
+      agent: "agent-a",
+      module: "docs",
+      task: "请整理 docs/summary.md",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(state.appendMessage).toHaveBeenCalledTimes(2);
+    expect(state.appendMessage.mock.calls[0]?.[0]).toMatchObject({
+      scope: { type: "project", projectId: "agent-a" },
+      sessionId: "sub-session-1",
+      role: "system",
+      content: expect.stringContaining("委派编号："),
+    });
+    expect(state.appendMessage.mock.calls[1]?.[0]).toMatchObject({
+      scope: { type: "main" },
+      sessionId: "main-session",
+      role: "system",
+      content: "已委派给：**Agent A**",
+      metadataJson: expect.stringContaining('"kind":"delegation_receipt"'),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.chatSend).toHaveBeenCalledTimes(1);
+    expect(state.chatSend.mock.calls[0]?.[0]).toMatchObject({
+      scope: { type: "project", projectId: "agent-a" },
+      module: "docs",
+      sessionId: "sub-session-1",
+      skipUserMessagePersistence: true,
+      delegationContext: expect.objectContaining({
+        projectId: "agent-a",
+        projectName: "Agent A",
+      }),
+    });
+  });
+
+  it("sends delegated task context as a custom sdk message instead of a user prompt", async () => {
+    const { agentService } =
+      await import("../../electron/main/services/agentService");
+
+    await agentService.send({
+      scope: { type: "project", projectId: "agent-a" },
+      module: "docs",
+      sessionId: "sub-session-1",
+      message: "请整理 docs/summary.md",
+      delegationContext: {
+        delegationId: "delegation-1",
+        mainSessionId: "main-session",
+        source: "main",
+        projectId: "agent-a",
+        projectName: "Agent A",
+      },
+      skipUserMessagePersistence: true,
+    });
+
+    expect(state.sendCustomMessage).toHaveBeenCalledTimes(1);
+    expect(state.prompt).not.toHaveBeenCalled();
+    expect(state.sendUserMessage).not.toHaveBeenCalled();
+    expect(state.sendCustomMessage.mock.calls[0]?.[0]).toMatchObject({
+      customType: "delegation_task",
+      display: false,
+      content: expect.stringContaining("委派编号：delegation-1"),
+    });
+    expect(state.sendCustomMessage.mock.calls[0]?.[1]).toEqual({
+      triggerTurn: true,
+    });
+  });
+
+  it("logs the final system prompt as rendered markdown in development mode", async () => {
+    const { logger } = await import("../../electron/main/services/logger");
+    const mockedLoggerInfo = vi.mocked(logger.info);
+    mockedLoggerInfo.mockClear();
+
+    state.getAgentSystemPrompt
+      .mockReset()
+      .mockResolvedValue("# 标题\n\n- 条目 A");
+    state.buildSessionSystemPrompt
+      .mockReset()
+      .mockImplementation((prompt) => `${prompt}\n\n## 扩展\n内容`);
+    state.prompt.mockReset().mockImplementation(async () => {
+      state.sessionListener?.({ type: "agent_end" });
+    });
+
+    const { agentService } =
+      await import("../../electron/main/services/agentService");
+
+    await agentService.send({
+      scope: { type: "main" },
+      module: "main",
+      sessionId: "main-session",
+      requestId: "main-request-system-prompt-log",
+      message: "测试开发环境 system prompt 日志",
+    });
+
+    expect(mockedLoggerInfo).toHaveBeenCalledWith(
+      "Final system prompt metadata (development)",
+      {
+        scope: "main-agent",
+        chatSessionId: "main-session",
+      },
+    );
+
+    const markdownLog = mockedLoggerInfo.mock.calls.find(
+      ([message]) =>
+        typeof message === "string" &&
+        message.includes("Final system prompt Markdown (development)"),
+    );
+
+    expect(markdownLog?.[0]).toContain(
+      "Final system prompt Markdown (development)\n\n# 标题\n\n- 条目 A",
+    );
+    expect(markdownLog?.[0]).toContain("## 扩展\n内容");
+  });
+
+  it("reuses delegated sessions and auto reports the latest output", async () => {
+    const { agentService } =
+      await import("../../electron/main/services/agentService");
+
+    await agentService.send({
+      scope: { type: "project", projectId: "agent-a" },
+      module: "docs",
+      sessionId: "sub-session-1",
+      message: "第一次委派",
+      delegationContext: {
+        delegationId: "delegation-1",
+        mainSessionId: "main-session",
+        source: "main",
+        projectId: "agent-a",
+        projectName: "Agent A",
+      },
+      skipUserMessagePersistence: true,
+    });
+
+    state.appendMessage.mockClear();
+    state.chatSend.mockClear();
+    state.sendCustomMessage.mockReset().mockImplementation(async () => {
+      state.sendCustomMessageCallCount += 1;
+      state.sessionListener?.({
+        type: "message_update",
+        assistantMessageEvent: {
+          type: "text_delta",
+          delta: "第二次委派已正常回报",
+        },
+      });
+      state.sessionListener?.({ type: "agent_end" });
+    });
+
+    await agentService.send({
+      scope: { type: "project", projectId: "agent-a" },
+      module: "docs",
+      sessionId: "sub-session-1",
+      message: "第二次委派",
+      delegationContext: {
+        delegationId: "delegation-2",
+        mainSessionId: "main-session",
+        source: "main",
+        projectId: "agent-a",
+        projectName: "Agent A",
+      },
+      skipUserMessagePersistence: true,
+    });
+
+    expect(state.createAgentSession).toHaveBeenCalledTimes(1);
+    expect(state.appendMessage).toHaveBeenCalledTimes(1);
+    expect(state.appendMessage.mock.calls[0]?.[0]).toMatchObject({
+      scope: { type: "main" },
+      sessionId: "main-session",
+      metadataJson: expect.stringContaining('"delegationId":"delegation-2"'),
+    });
+    expect(state.chatSend).toHaveBeenCalledTimes(1);
+    expect(state.chatSend.mock.calls[0]?.[0].message).toContain(
+      "第二次委派已正常回报",
+    );
+    expect(state.chatSend.mock.calls[0]?.[0].message).not.toContain(
+      "子智能体 的结果已自动回报给主 Agent",
+    );
+  });
+});

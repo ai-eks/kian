@@ -1,0 +1,556 @@
+name: Build And Publish Main Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  prepare-release:
+    name: Prepare Release Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      app_version: ${{ steps.version.outputs.app_version }}
+      release_name: ${{ steps.version.outputs.release_name }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      previous_stable_tag: ${{ steps.version.outputs.previous_stable_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Resolve release version and tag
+        id: version
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          node <<'NODE'
+          const { execSync } = require('node:child_process');
+          const { resolveReleaseVersion } = require('./scripts/releaseVersion.js');
+          const packageJson = require('./package.json');
+          const tagsRaw = execSync("git tag -l 'v*'", { encoding: 'utf8' })
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+          const result = resolveReleaseVersion({
+            branchName: process.env.BRANCH_NAME || '',
+            packageVersion: packageJson.version,
+            tags: tagsRaw,
+            now: new Date(),
+            timeZone: 'Asia/Shanghai'
+          });
+
+          const outputs = [
+            `release_tag=${result.releaseTag}`,
+            `app_version=${result.appVersion}`,
+            `release_name=${result.releaseName}`,
+            `prerelease=${result.prerelease}`,
+            `previous_stable_tag=${result.previousStableTag}`
+          ];
+
+          const fs = require('node:fs');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `${outputs.join('\n')}\n`, 'utf8');
+          console.log(outputs.join('\n'));
+          NODE
+
+  build-macos:
+    name: Build (macOS ${{ matrix.arch }})
+    runs-on: macos-latest
+    needs: prepare-release
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set package version
+        run: |
+          set -euo pipefail
+          pnpm version --allow-same-version --no-git-tag-version "${{ needs.prepare-release.outputs.app_version }}"
+
+      - name: Prepare macOS signing and notarization
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_NOTARY_API_KEY_BASE64: ${{ secrets.MACOS_NOTARY_API_KEY_BASE64 }}
+          MACOS_NOTARY_API_KEY_ID: ${{ secrets.MACOS_NOTARY_API_KEY_ID }}
+          MACOS_NOTARY_API_ISSUER_ID: ${{ secrets.MACOS_NOTARY_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for key in \
+            MACOS_CERTIFICATE_P12_BASE64 \
+            MACOS_CERTIFICATE_PASSWORD \
+            MACOS_NOTARY_API_KEY_BASE64 \
+            MACOS_NOTARY_API_KEY_ID \
+            MACOS_NOTARY_API_ISSUER_ID
+          do
+            if [ -z "${!key:-}" ]; then
+              missing+=("${key}")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required macOS signing/notarization secrets: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+          cert_path="${RUNNER_TEMP}/macos-signing-cert.p12"
+          key_path="${RUNNER_TEMP}/AuthKey_${MACOS_NOTARY_API_KEY_ID}.p8"
+
+          # Decode base64 secrets safely (remove accidental whitespace/newlines).
+          if ! printf '%s' "${MACOS_CERTIFICATE_P12_BASE64}" \
+            | tr -d '[:space:]' \
+            | openssl base64 -d -A -out "${cert_path}"; then
+            echo "Failed to decode MACOS_CERTIFICATE_P12_BASE64. It must be base64 for a .p12 file."
+            exit 1
+          fi
+
+          if ! printf '%s' "${MACOS_NOTARY_API_KEY_BASE64}" \
+            | tr -d '[:space:]' \
+            | openssl base64 -d -A -out "${key_path}"; then
+            echo "Failed to decode MACOS_NOTARY_API_KEY_BASE64. It must be base64 for AuthKey_*.p8."
+            exit 1
+          fi
+
+          cert_size="$(wc -c < "${cert_path}" | tr -d ' ')"
+          if [ "${cert_size}" -lt 1024 ]; then
+            echo "Decoded certificate file is unexpectedly small (${cert_size} bytes)."
+            echo "Please make sure MACOS_CERTIFICATE_P12_BASE64 is generated from a real .p12 file."
+            exit 1
+          fi
+
+          if ! grep -q "BEGIN PRIVATE KEY" "${key_path}"; then
+            echo "Decoded notarization key is invalid. Expected AuthKey_*.p8 content."
+            exit 1
+          fi
+
+          chmod 600 "${cert_path}" "${key_path}"
+
+          {
+            echo "CSC_LINK=${cert_path}"
+            echo "CSC_KEY_PASSWORD=${MACOS_CERTIFICATE_PASSWORD}"
+            echo "NOTARY_API_KEY_PATH=${key_path}"
+            echo "NOTARY_API_KEY_ID=${MACOS_NOTARY_API_KEY_ID}"
+            echo "NOTARY_API_ISSUER_ID=${MACOS_NOTARY_API_ISSUER_ID}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Build and publish app
+        run: |
+          set -euo pipefail
+          node ./scripts/package-app.js --mac --${{ matrix.arch }} --config --publish never
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos-${{ matrix.arch }}
+          path: |
+            release/**/*.dmg
+            release/**/*.zip
+            release/**/*.zip.blockmap
+          if-no-files-found: error
+          retention-days: 7
+
+  build-windows:
+    name: Build (Windows x64)
+    runs-on: windows-latest
+    needs: prepare-release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set package version
+        run: pnpm version --allow-same-version --no-git-tag-version "${{ needs.prepare-release.outputs.app_version }}"
+
+      - name: Build package
+        run: |
+          node ./scripts/package-app.js --win --x64 --config --publish never
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows-x64
+          path: |
+            release/**/*.exe
+            release/**/*.exe.blockmap
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [prepare-release, build-macos, build-windows]
+    if: ${{ needs.prepare-release.outputs.release_tag != '' }}
+
+    steps:
+      - name: Checkout repository history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: dist
+          merge-multiple: true
+
+      - name: Build release body
+        id: notes
+        env:
+          APP_VERSION: ${{ needs.prepare-release.outputs.app_version }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+          IS_PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
+          PREVIOUS_STABLE_TAG: ${{ needs.prepare-release.outputs.previous_stable_tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          REPO_URL="https://github.com/${REPOSITORY}"
+
+          NOTES_FILE="release-body.md"
+          {
+            echo "**Download: https://heykian.com**"
+            echo
+            echo "Automated build from \`${GITHUB_REF_NAME}\`."
+            echo "Version: \`${APP_VERSION}\`"
+            echo "Tag: \`${RELEASE_TAG}\`"
+            echo "Commit: ${GITHUB_SHA}"
+            echo
+
+            if [ "${IS_PRERELEASE}" = "false" ]; then
+              echo "## What's Changed"
+
+              RANGE="${GITHUB_SHA}"
+              if [ -n "${PREVIOUS_STABLE_TAG}" ] && git rev-parse "${PREVIOUS_STABLE_TAG}" >/dev/null 2>&1; then
+                RANGE="${PREVIOUS_STABLE_TAG}..${GITHUB_SHA}"
+              fi
+
+              COMMITS="$(git log --reverse --max-count 200 --pretty=format:'%H%x09%s' "${RANGE}")"
+              if [ -z "${COMMITS}" ]; then
+                echo "- No code changes since previous stable release."
+              else
+                while IFS=$'\t' read -r sha subject; do
+                  [ -n "${sha}" ] || continue
+                  short_sha="${sha:0:7}"
+                  echo "- ${subject} ([\`${short_sha}\`](${REPO_URL}/commit/${sha}))"
+                done <<< "${COMMITS}"
+              fi
+
+              if [ -n "${PREVIOUS_STABLE_TAG}" ] && git rev-parse "${PREVIOUS_STABLE_TAG}" >/dev/null 2>&1; then
+                echo
+                echo "Full Changelog: [${PREVIOUS_STABLE_TAG}...${RELEASE_TAG}](${REPO_URL}/compare/${PREVIOUS_STABLE_TAG}...${RELEASE_TAG})"
+              fi
+            else
+              echo "## What's Changed"
+              echo "- This is a beta/pre-release build."
+              echo "- Commit: [\`${GITHUB_SHA:0:7}\`](${REPO_URL}/commit/${GITHUB_SHA})"
+            fi
+          } > "${NOTES_FILE}"
+
+          {
+            echo "body<<EOF"
+            cat "${NOTES_FILE}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Generate latest-mac.yml
+        env:
+          APP_VERSION: ${{ needs.prepare-release.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const distDir = 'dist';
+          const appVersion = process.env.APP_VERSION || '';
+
+          if (!appVersion) {
+            console.error('Missing APP_VERSION.');
+            process.exit(1);
+          }
+
+          const walkFiles = (dir) => {
+            const result = [];
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                result.push(...walkFiles(fullPath));
+                continue;
+              }
+              if (entry.isFile()) {
+                result.push(fullPath);
+              }
+            }
+            return result;
+          };
+
+          const packageFiles = walkFiles(distDir)
+            .filter((filePath) => {
+              const base = path.basename(filePath);
+              // electron-updater on macOS consumes ZIP payloads via Squirrel.Mac.
+              return base.startsWith(`Kian-${appVersion}`) && base.endsWith('.zip');
+            })
+            .sort((a, b) => a.localeCompare(b));
+
+          if (packageFiles.length === 0) {
+            console.error('No macOS ZIP update packages found under dist/.');
+            process.exit(1);
+          }
+
+          const files = packageFiles.map((filePath) => {
+            const data = fs.readFileSync(filePath);
+            return {
+              url: `${appVersion}/${path.basename(filePath)}`,
+              sha512: crypto.createHash('sha512').update(data).digest('base64'),
+              size: data.length
+            };
+          });
+
+          const preferredPath =
+            files.find((item) => item.url.includes('-arm64.zip'))?.url ||
+            files.find((item) => item.url.endsWith('.zip'))?.url ||
+            files[0].url;
+
+          const preferredFile = files.find((item) => item.url === preferredPath);
+          if (!preferredFile) {
+            console.error(`Preferred update payload is missing: ${preferredPath}`);
+            process.exit(1);
+          }
+
+          const lines = [
+            `version: ${appVersion}`,
+            'files:',
+            ...files.flatMap((item) => [
+              `  - url: ${item.url}`,
+              `    sha512: ${item.sha512}`,
+              `    size: ${item.size}`
+            ]),
+            `path: ${preferredFile.url}`,
+            `sha512: ${preferredFile.sha512}`,
+            `releaseDate: '${new Date().toISOString()}'`
+          ];
+
+          fs.writeFileSync(path.join(distDir, 'latest-mac.yml'), `${lines.join('\n')}\n`, 'utf8');
+          console.log(`Generated dist/latest-mac.yml with ${files.length} payload(s).`);
+          NODE
+
+      - name: Generate latest.yml (Windows)
+        env:
+          APP_VERSION: ${{ needs.prepare-release.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const distDir = 'dist';
+          const appVersion = process.env.APP_VERSION || '';
+
+          if (!appVersion) {
+            console.error('Missing APP_VERSION.');
+            process.exit(1);
+          }
+
+          const walkFiles = (dir) => {
+            const result = [];
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                result.push(...walkFiles(fullPath));
+                continue;
+              }
+              if (entry.isFile()) {
+                result.push(fullPath);
+              }
+            }
+            return result;
+          };
+
+          const packageFiles = walkFiles(distDir)
+            .filter((filePath) => {
+              const base = path.basename(filePath);
+              return base.toLowerCase().endsWith('.exe') && base.includes(appVersion);
+            })
+            .sort((a, b) => a.localeCompare(b));
+
+          if (packageFiles.length === 0) {
+            console.error('No Windows package files found under dist/.');
+            process.exit(1);
+          }
+
+          const files = packageFiles.map((filePath) => {
+            const data = fs.readFileSync(filePath);
+            return {
+              url: `${appVersion}/${path.basename(filePath)}`,
+              sha512: crypto.createHash('sha512').update(data).digest('base64'),
+              size: data.length
+            };
+          });
+
+          const preferredFile = files[0];
+
+          const lines = [
+            `version: ${appVersion}`,
+            'files:',
+            ...files.flatMap((item) => [
+              `  - url: ${item.url}`,
+              `    sha512: ${item.sha512}`,
+              `    size: ${item.size}`
+            ]),
+            `path: ${preferredFile.url}`,
+            `sha512: ${preferredFile.sha512}`,
+            `releaseDate: '${new Date().toISOString()}'`
+          ];
+
+          fs.writeFileSync(path.join(distDir, 'latest.yml'), `${lines.join('\n')}\n`, 'utf8');
+          console.log(`Generated dist/latest.yml with ${files.length} payload(s).`);
+          NODE
+
+      - name: Publish assets to release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ needs.prepare-release.outputs.release_tag }}
+          name: ${{ needs.prepare-release.outputs.release_name }}
+          prerelease: ${{ needs.prepare-release.outputs.prerelease }}
+          body: ${{ steps.notes.outputs.body }}
+
+      - name: Install ossutil
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://gosspublic.alicdn.com/ossutil/1.7.16/ossutil64" -o ossutil
+          chmod +x ossutil
+          ./ossutil --version
+
+      - name: Upload artifacts to Aliyun OSS
+        env:
+          ALIYUN_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: oss-cn-hongkong.aliyuncs.com
+          OSS_BUCKET: sandai-fe-builds
+          OSS_PREFIX: kian-releases
+          APP_VERSION: ${{ needs.prepare-release.outputs.app_version }}
+          IS_PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ALIYUN_ACCESS_KEY_ID}" ] || [ -z "${ALIYUN_ACCESS_KEY_SECRET}" ]; then
+            echo "Missing Aliyun OSS credentials. Please set ALIYUN_ACCESS_KEY_ID and ALIYUN_ACCESS_KEY_SECRET."
+            exit 1
+          fi
+
+          mapfile -t DMG_FILES < <(find dist -type f -name "Kian-${APP_VERSION}*.dmg" | sort)
+          mapfile -t ZIP_FILES < <(find dist -type f -name "Kian-${APP_VERSION}*.zip" | sort)
+          mapfile -t ZIP_BLOCKMAP_FILES < <(find dist -type f -name "Kian-${APP_VERSION}*.zip.blockmap" | sort)
+          mapfile -t EXE_FILES < <(find dist -type f -name "*${APP_VERSION}*.exe" | sort)
+          mapfile -t EXE_BLOCKMAP_FILES < <(find dist -type f -name "*${APP_VERSION}*.exe.blockmap" | sort)
+          mapfile -t LATEST_MAC_YML_FILES < <(find dist -type f -name 'latest-mac.yml' | sort)
+          mapfile -t LATEST_YML_FILES < <(find dist -type f -name 'latest.yml' | sort)
+
+          if [ "${#DMG_FILES[@]}" -eq 0 ]; then
+            echo "No dmg files found under dist/"
+            exit 1
+          fi
+          if [ "${#ZIP_FILES[@]}" -eq 0 ]; then
+            echo "No zip files found under dist/"
+            exit 1
+          fi
+          if [ "${#EXE_FILES[@]}" -eq 0 ]; then
+            echo "No exe files found under dist/"
+            exit 1
+          fi
+          if [ "${#LATEST_MAC_YML_FILES[@]}" -eq 0 ]; then
+            echo "No latest-mac.yml found under dist/"
+            exit 1
+          fi
+          if [ "${#LATEST_YML_FILES[@]}" -eq 0 ]; then
+            echo "No latest.yml found under dist/"
+            exit 1
+          fi
+
+          if [ -z "${APP_VERSION}" ]; then
+            echo "Missing APP_VERSION from build job output."
+            exit 1
+          fi
+
+          ./ossutil config \
+            -e "https://${OSS_ENDPOINT}" \
+            -i "${ALIYUN_ACCESS_KEY_ID}" \
+            -k "${ALIYUN_ACCESS_KEY_SECRET}"
+
+          if [ "${IS_PRERELEASE}" = "false" ]; then
+            printf '%s\n' "${APP_VERSION}" > latest.txt
+            ./ossutil cp latest.txt "oss://${OSS_BUCKET}/${OSS_PREFIX}/latest.txt" -f
+
+            for file in "${LATEST_MAC_YML_FILES[@]}" "${LATEST_YML_FILES[@]}"; do
+              [ -f "${file}" ] || continue
+              base="$(basename "${file}")"
+              echo "Uploading ${file} -> oss://${OSS_BUCKET}/${OSS_PREFIX}/${base}"
+              ./ossutil cp "${file}" "oss://${OSS_BUCKET}/${OSS_PREFIX}/${base}" -f
+            done
+
+            for file in "${ZIP_FILES[@]}" "${ZIP_BLOCKMAP_FILES[@]}" "${DMG_FILES[@]}" "${EXE_FILES[@]}" "${EXE_BLOCKMAP_FILES[@]}"; do
+              [ -f "${file}" ] || continue
+              base="$(basename "${file}")"
+              echo "Uploading ${file} -> oss://${OSS_BUCKET}/${OSS_PREFIX}/${APP_VERSION}/${base}"
+              ./ossutil cp "${file}" "oss://${OSS_BUCKET}/${OSS_PREFIX}/${APP_VERSION}/${base}" -f
+            done
+          fi

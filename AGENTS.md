@@ -1,0 +1,3 @@
+- Use `ScrollArea` component consistently across pages for better scrollbar UX; avoid native `overflow` scroll containers.
+- Use English for commit messages, keep them concise and clear, follow git message best practices; they will be shown as Changelog.
+- All user-facing text must be internationalized; do not add or modify visible copy without adding corresponding i18n entries and translations.

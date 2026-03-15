@@ -1,0 +1,154 @@
+{
+  "name": "kian",
+  "productName": "Kian",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kian is a multi-agent collaboration system.",
+  "author": {
+    "name": "Lei Sun",
+    "email": "sunlei@sand.ai"
+  },
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SandAI-org/kian.git"
+  },
+  "homepage": "https://github.com/SandAI-org/kian",
+  "bugs": {
+    "url": "https://github.com/SandAI-org/kian/issues"
+  },
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:mac": "node ./scripts/package-app.js --mac --config",
+    "build:win": "node ./scripts/package-app.js --win --config",
+    "build:linux": "node ./scripts/package-app.js --linux --config",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.0.0",
+    "@hookform/resolvers": "^5.2.1",
+    "@larksuiteoapi/node-sdk": "^1.59.0",
+    "@mariozechner/pi-ai": "^0.56.2",
+    "@mariozechner/pi-coding-agent": "^0.56.2",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@monaco-editor/react": "^4.7.0",
+    "@tanstack/react-query": "^5.85.6",
+    "antd": "^5.27.1",
+    "beautiful-mermaid": "^1.1.3",
+    "electron-updater": "^6.8.3",
+    "fast-json-patch": "^3.1.1",
+    "fix-path": "^5.0.0",
+    "github-markdown-css": "^5.9.0",
+    "highlight.js": "^11.11.1",
+    "jmespath": "^0.16.0",
+    "monaco-editor": "^0.55.1",
+    "protobufjs": "^7.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-hook-form": "^7.62.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.8.2",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
+    "simplebar": "^6.3.3",
+    "simplebar-react": "^3.3.2",
+    "uuid": "^11.1.0",
+    "zod": "^4.1.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/jmespath": "^0.15.2",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.21",
+    "electron": "^37.2.5",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^3.1.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.2",
+    "vite": "^5.4.19",
+    "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "com.heykian.desktop",
+    "productName": "Kian",
+    "directories": {
+      "buildResources": "build",
+      "output": "release/${version}"
+    },
+    "files": [
+      "out/**/*",
+      "default-system-prompt.md",
+      "default-main-system-prompt.md",
+      "skills/**/*",
+      "skills/**/.skill.json"
+    ],
+    "afterSign": "./scripts/afterSign.js",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/koffi/build/koffi/darwin_*/*.node"
+    ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://sandai-fe-builds.oss-cn-hongkong.aliyuncs.com/kian-releases"
+      }
+    ],
+    "mac": {
+      "icon": "icons/icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {
+      "writeUpdateInfo": true,
+      "background": "build/dmg-background.png",
+      "iconSize": 128,
+      "window": {
+        "width": 660,
+        "height": 420
+      },
+      "contents": [
+        {
+          "x": 172,
+          "y": 272,
+          "type": "file"
+        },
+        {
+          "x": 490,
+          "y": 272,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "icon": "icons/icon.ico",
+      "target": "nsis",
+      "forceCodeSigning": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "icon": "icons/icon.png",
+      "target": "AppImage"
+    }
+  },
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be"
+}

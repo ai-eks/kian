@@ -1,0 +1,275 @@
+import { api } from "@renderer/lib/api";
+import {
+  appendStreamingAssistantDelta,
+  ensureStreamingAssistantDone,
+  upsertStreamingTool,
+  type StreamingBlock,
+} from "@renderer/modules/chat/streamingState";
+import type { ChatHistoryUpdatedEvent, ChatStreamEvent } from "@shared/types";
+import { create } from "zustand";
+
+interface SessionStreamState {
+  streamingBlocks: StreamingBlock[];
+  streamingInProgress: boolean;
+  streamError?: string;
+  activeRequestId?: string;
+  blockCounter: number;
+}
+
+interface ChatStreamStoreState {
+  sessions: Record<string, SessionStreamState>;
+  beginRequest: (sessionId: string, requestId: string) => void;
+  releaseRequest: (sessionId: string, requestId?: string) => void;
+  clearSessionStream: (sessionId: string) => void;
+  ingestStreamEvent: (event: ChatStreamEvent) => void;
+  ingestHistoryUpdated: (event: ChatHistoryUpdatedEvent) => void;
+}
+
+const createEmptySessionState = (): SessionStreamState => ({
+  streamingBlocks: [],
+  streamingInProgress: false,
+  streamError: undefined,
+  activeRequestId: undefined,
+  blockCounter: 0,
+});
+
+const nextSessionsState = (
+  sessions: Record<string, SessionStreamState>,
+  sessionId: string,
+  updater: (current: SessionStreamState) => SessionStreamState,
+): Record<string, SessionStreamState> => {
+  const current = sessions[sessionId] ?? createEmptySessionState();
+  const next = updater(current);
+  if (next === current) return sessions;
+  return {
+    ...sessions,
+    [sessionId]: next,
+  };
+};
+
+export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
+  sessions: {},
+
+  beginRequest: (sessionId, requestId) => {
+    set((state) => {
+      const sessions = nextSessionsState(state.sessions, sessionId, (current) => {
+        if (
+          current.activeRequestId === requestId &&
+          current.streamingInProgress &&
+          current.streamingBlocks.length === 0 &&
+          !current.streamError
+        ) {
+          return current;
+        }
+        return {
+          streamingBlocks: [],
+          streamingInProgress: true,
+          streamError: undefined,
+          activeRequestId: requestId,
+          blockCounter: 0,
+        };
+      });
+      if (sessions === state.sessions) return state;
+      return { sessions };
+    });
+  },
+
+  releaseRequest: (sessionId, requestId) => {
+    set((state) => {
+      const sessions = nextSessionsState(state.sessions, sessionId, (current) => {
+        if (!current.activeRequestId) return current;
+        if (requestId && current.activeRequestId !== requestId) return current;
+        return {
+          ...current,
+          activeRequestId: undefined,
+        };
+      });
+      if (sessions === state.sessions) return state;
+      return { sessions };
+    });
+  },
+
+  clearSessionStream: (sessionId) => {
+    set((state) => {
+      const sessions = nextSessionsState(state.sessions, sessionId, (current) => {
+        if (
+          current.streamingBlocks.length === 0 &&
+          !current.streamingInProgress &&
+          !current.streamError &&
+          !current.activeRequestId &&
+          current.blockCounter === 0
+        ) {
+          return current;
+        }
+        return createEmptySessionState();
+      });
+      if (sessions === state.sessions) return state;
+      return { sessions };
+    });
+  },
+
+  ingestStreamEvent: (event) => {
+    set((state) => {
+      const sessions = nextSessionsState(
+        state.sessions,
+        event.sessionId,
+        (current): SessionStreamState => {
+          if (
+            current.activeRequestId &&
+            current.activeRequestId !== event.requestId
+          ) {
+            return current;
+          }
+
+          let nextBlocks = current.streamingBlocks;
+          let nextInProgress = current.streamingInProgress;
+          let nextError = current.streamError;
+          let nextRequestId = current.activeRequestId;
+          let nextCounter = current.blockCounter;
+          const eventCreatedAt = event.createdAt ?? new Date().toISOString();
+          const createStreamingBlockKey = (prefix: string): string => {
+            nextCounter += 1;
+            return `${prefix}-${nextCounter}`;
+          };
+
+          if (event.type === "assistant_delta") {
+            nextInProgress = true;
+            nextError = undefined;
+            nextBlocks = appendStreamingAssistantDelta(
+              nextBlocks,
+              event.delta ?? "",
+              eventCreatedAt,
+              createStreamingBlockKey,
+            );
+          } else if (event.type === "assistant_done") {
+            nextInProgress = false;
+            nextError = undefined;
+            nextRequestId = undefined;
+            nextBlocks = ensureStreamingAssistantDone(
+              nextBlocks,
+              event.fullText,
+              eventCreatedAt,
+              createStreamingBlockKey,
+            );
+          } else if (event.type === "tool_start") {
+            const toolUseId = event.toolUseId?.trim();
+            if (!toolUseId) return current;
+            nextInProgress = true;
+            nextError = undefined;
+            nextBlocks = upsertStreamingTool(
+              nextBlocks,
+              {
+                toolUseId,
+                toolName: event.toolName ?? "工具",
+                status: "starting",
+                toolInput: event.toolInput,
+              },
+              eventCreatedAt,
+              createStreamingBlockKey,
+            );
+          } else if (event.type === "tool_progress") {
+            const toolUseId = event.toolUseId?.trim();
+            if (!toolUseId) return current;
+            nextInProgress = true;
+            nextError = undefined;
+            nextBlocks = upsertStreamingTool(
+              nextBlocks,
+              {
+                toolUseId,
+                toolName: event.toolName ?? "工具",
+                status: "running",
+                toolInput: event.toolInput,
+              },
+              eventCreatedAt,
+              createStreamingBlockKey,
+            );
+          } else if (event.type === "tool_output") {
+            const toolUseId = event.toolUseId?.trim();
+            if (!toolUseId) return current;
+            nextInProgress = true;
+            nextError = undefined;
+            nextBlocks = upsertStreamingTool(
+              nextBlocks,
+              {
+                toolUseId,
+                toolName: event.toolName ?? "工具",
+                status: "done",
+                output: event.output,
+              },
+              eventCreatedAt,
+              createStreamingBlockKey,
+            );
+          } else if (event.type === "error") {
+            nextInProgress = false;
+            nextRequestId = undefined;
+            nextError = event.error ?? "流式输出失败";
+          } else {
+            return current;
+          }
+
+          if (
+            nextBlocks === current.streamingBlocks &&
+            nextInProgress === current.streamingInProgress &&
+            nextError === current.streamError &&
+            nextRequestId === current.activeRequestId &&
+            nextCounter === current.blockCounter
+          ) {
+            return current;
+          }
+
+          return {
+            ...current,
+            streamingBlocks: nextBlocks,
+            streamingInProgress: nextInProgress,
+            streamError: nextError,
+            activeRequestId: nextRequestId,
+            blockCounter: nextCounter,
+          };
+        },
+      );
+      if (sessions === state.sessions) return state;
+      return { sessions };
+    });
+  },
+
+  ingestHistoryUpdated: (event) => {
+    if (event.role !== "assistant") {
+      return;
+    }
+
+    set((state) => {
+      const sessions = nextSessionsState(state.sessions, event.sessionId, (current) => {
+        if (current.activeRequestId) return current;
+        if (
+          current.streamingBlocks.length === 0 &&
+          !current.streamingInProgress &&
+          !current.streamError &&
+          current.blockCounter === 0
+        ) {
+          return current;
+        }
+        return createEmptySessionState();
+      });
+      if (sessions === state.sessions) return state;
+      return { sessions };
+    });
+  },
+}));
+
+const initializeChatStreamBridge = (): void => {
+  if (typeof window === "undefined") return;
+  const bridgeFlagStore = globalThis as typeof globalThis & {
+    __kianChatStreamBridgeInitialized__?: boolean;
+  };
+  if (bridgeFlagStore.__kianChatStreamBridgeInitialized__) return;
+  bridgeFlagStore.__kianChatStreamBridgeInitialized__ = true;
+
+  api.chat.subscribeStream((event) => {
+    useChatStreamStore.getState().ingestStreamEvent(event);
+  });
+  api.chat.subscribeHistoryUpdated((event) => {
+    useChatStreamStore.getState().ingestHistoryUpdated(event);
+  });
+};
+
+initializeChatStreamBridge();

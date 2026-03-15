@@ -1,0 +1,12 @@
+node_modules
+out
+dist
+.vscode
+.DS_Store
+*.log
+playwright-report
+coverage
+.env
+release
+.env.local
+.tmp
