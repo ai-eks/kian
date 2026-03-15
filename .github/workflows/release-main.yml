@@ -179,7 +179,7 @@ jobs:
           node ./scripts/package-app.js --mac --${{ matrix.arch }} --config --publish never
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-macos-${{ matrix.arch }}
           path: |
@@ -220,7 +220,7 @@ jobs:
           node ./scripts/package-app.js --win --x64 --config --publish never
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-windows-x64
           path: |
@@ -242,7 +242,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: build-*
           path: dist
