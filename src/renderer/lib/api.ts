@@ -176,11 +176,13 @@ export const api = {
     writeText: async (text: string): Promise<boolean> => window.api.clipboard.writeText(text)
   },
   settings: {
-    get: async () => unwrap(await window.api.settings.get()),
-    setLastSelectedModel: async (model: string) =>
-      unwrap(await window.api.settings.setLastSelectedModel(model)),
-    setLastSelectedThinkingLevel: async (level: ChatThinkingLevel) =>
-      unwrap(await window.api.settings.setLastSelectedThinkingLevel(level)),
+    get: async (scope: ChatScope) => unwrap(await window.api.settings.get(scope)),
+    setLastSelectedModel: async (scope: ChatScope, model: string) =>
+      unwrap(await window.api.settings.setLastSelectedModel(scope, model)),
+    setLastSelectedThinkingLevel: async (
+      scope: ChatScope,
+      level: ChatThinkingLevel,
+    ) => unwrap(await window.api.settings.setLastSelectedThinkingLevel(scope, level)),
     getShortcutConfig: async (): Promise<ShortcutConfigDTO> =>
       unwrap(await window.api.settings.getShortcutConfig()),
     saveShortcutConfig: async (payload: ShortcutConfigDTO) =>

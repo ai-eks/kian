@@ -1471,6 +1471,7 @@ export const ModuleChatPane = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingFilesRef = useRef<LocalChatFile[]>([]);
   const hasHydratedThinkingLevelRef = useRef(false);
+  const initializedScopeKeyRef = useRef<string | null>(null);
 
   const streamSession = useChatStreamStore((state) =>
     currentSessionId ? state.sessions[currentSessionId] : undefined,
@@ -1497,8 +1498,8 @@ export const ModuleChatPane = ({
     queryFn: api.settings.getShortcutConfig,
   });
   const claudeStatusQuery = useQuery({
-    queryKey: ["settings", "claude"],
-    queryFn: api.settings.get,
+    queryKey: ["settings", "claude", scopeKey],
+    queryFn: () => api.settings.get(effectiveScope),
   });
   const legacyInputShortcutTipDismissed = useMemo(() => {
     if (typeof window === "undefined") {
@@ -1602,9 +1603,19 @@ export const ModuleChatPane = ({
 
   // Reset state when project changes
   useEffect(() => {
+    if (initializedScopeKeyRef.current === null) {
+      initializedScopeKeyRef.current = scopeKey;
+      return;
+    }
+    if (initializedScopeKeyRef.current === scopeKey) {
+      return;
+    }
+    initializedScopeKeyRef.current = scopeKey;
     setInternalSessionId(undefined);
     setInput("");
     setIsComposing(false);
+    setSelectedModel(undefined);
+    setSelectedThinkingLevel("low");
     setPendingUserMessages([]);
     setQueuedSendPayloads([]);
     setIsCreatingSession(false);
@@ -1615,6 +1626,7 @@ export const ModuleChatPane = ({
     hasInitialBottomPositionedRef.current = false;
     forceScrollToBottomRef.current = false;
     isBottomAnchorVisibleRef.current = true;
+    hasHydratedThinkingLevelRef.current = false;
   }, [scopeKey]);
 
   useEffect(() => {
@@ -2456,12 +2468,42 @@ export const ModuleChatPane = ({
       }))}
       onModelChange={(value) => {
         setSelectedModel(value);
-        api.settings.setLastSelectedModel(value).catch(() => {});
+        queryClient.setQueryData(
+          ["settings", "claude", scopeKey],
+          (
+            previous:
+              | Awaited<ReturnType<typeof api.settings.get>>
+              | undefined,
+          ) =>
+            previous
+              ? {
+                  ...previous,
+                  lastSelectedModel: value,
+                }
+              : previous,
+        );
+        api.settings.setLastSelectedModel(effectiveScope, value).catch(() => {});
       }}
       selectedThinkingLevel={selectedThinkingLevel}
       onThinkingLevelChange={(value) => {
         setSelectedThinkingLevel(value);
-        api.settings.setLastSelectedThinkingLevel(value).catch(() => {});
+        queryClient.setQueryData(
+          ["settings", "claude", scopeKey],
+          (
+            previous:
+              | Awaited<ReturnType<typeof api.settings.get>>
+              | undefined,
+          ) =>
+            previous
+              ? {
+                  ...previous,
+                  lastSelectedThinkingLevel: value,
+                }
+              : previous,
+        );
+        api.settings
+          .setLastSelectedThinkingLevel(effectiveScope, value)
+          .catch(() => {});
       }}
       thinkingLevelOptions={thinkingLevelOptions}
       thinkingLevelMenuHeader={t("思考等级")}

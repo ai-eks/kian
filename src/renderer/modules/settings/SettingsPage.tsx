@@ -422,7 +422,7 @@ export const SettingsPage = () => {
   });
   const claudeStatusQuery = useQuery({
     queryKey: ["settings", "claude"],
-    queryFn: api.settings.get,
+    queryFn: () => api.settings.get({ type: "main" }),
   });
   const availableProvidersQuery = useQuery({
     queryKey: ["settings", "available-providers"],

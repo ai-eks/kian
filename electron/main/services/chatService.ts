@@ -290,7 +290,7 @@ const generateSessionTitle = async (
       return;
     }
 
-    const status = await settingsService.getClaudeStatus();
+    const status = await settingsService.getClaudeStatus(payload.scope);
     const resolvedModel = resolveAutoTitleModel(payload, status);
     if (!resolvedModel) {
       logger.debug("Auto title skipped: no available model", {

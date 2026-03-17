@@ -263,11 +263,13 @@ const api = {
     },
   },
   settings: {
-    get: () => invoke<ClaudeConfigStatus>("settings:get"),
-    setLastSelectedModel: (model: string) =>
-      invoke<boolean>("settings:setLastSelectedModel", { model }),
-    setLastSelectedThinkingLevel: (level: "low" | "medium" | "high") =>
-      invoke<boolean>("settings:setLastSelectedThinkingLevel", { level }),
+    get: (scope: ChatScope) => invoke<ClaudeConfigStatus>("settings:get", { scope }),
+    setLastSelectedModel: (scope: ChatScope, model: string) =>
+      invoke<boolean>("settings:setLastSelectedModel", { scope, model }),
+    setLastSelectedThinkingLevel: (
+      scope: ChatScope,
+      level: "low" | "medium" | "high",
+    ) => invoke<boolean>("settings:setLastSelectedThinkingLevel", { scope, level }),
     getShortcutConfig: () =>
       invoke<ShortcutConfigDTO>("settings:getShortcutConfig"),
     saveShortcutConfig: (payload: ShortcutConfigDTO) =>

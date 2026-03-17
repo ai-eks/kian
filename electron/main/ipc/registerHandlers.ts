@@ -349,16 +349,20 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
     linkOpenService.open(input.url)
   );
 
-  handle('settings:get', z.object({}).optional(), async () => settingsService.getClaudeStatus());
-  handle('settings:setLastSelectedModel', z.object({ model: z.string().min(1) }), async (input) => {
-    await settingsService.setLastSelectedModel(input.model);
+  handle(
+    'settings:get',
+    z.object({ scope: chatScopeSchema }).optional(),
+    async (input) => settingsService.getClaudeStatus(input?.scope ?? { type: 'main' })
+  );
+  handle('settings:setLastSelectedModel', z.object({ scope: chatScopeSchema, model: z.string().min(1) }), async (input) => {
+    await settingsService.setLastSelectedModel(input.scope, input.model);
     return true;
   });
   handle(
     'settings:setLastSelectedThinkingLevel',
-    z.object({ level: z.enum(['low', 'medium', 'high']) }),
+    z.object({ scope: chatScopeSchema, level: z.enum(['low', 'medium', 'high']) }),
     async (input) => {
-      await settingsService.setLastSelectedThinkingLevel(input.level);
+      await settingsService.setLastSelectedThinkingLevel(input.scope, input.level);
       return true;
     }
   );

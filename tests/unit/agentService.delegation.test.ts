@@ -787,4 +787,99 @@ describe("agentService delegation reporting", () => {
       "子智能体 的结果已自动回报给主 Agent",
     );
   });
+
+  it("keeps persisted session context when switching models", async () => {
+    const continuedSessionManager = {
+      buildSessionContext: () => ({
+        model: {
+          provider: "anthropic",
+          modelId: "claude-old",
+        },
+      }),
+    };
+    state.continueRecent.mockReset().mockReturnValue(continuedSessionManager);
+    state.createSessionManager.mockReset().mockReturnValue({
+      buildSessionContext: () => ({ model: null }),
+    });
+    state.getClaudeStatus.mockReset().mockResolvedValue({
+      allEnabledModels: [{ provider: "openai", modelId: "gpt-5" }],
+      providers: {
+        anthropic: {
+          apiKey: "anthropic-key",
+        },
+        openai: {
+          apiKey: "openai-key",
+        },
+      },
+    });
+    state.getModel.mockReset().mockReturnValue({
+      provider: "openai",
+      modelId: "gpt-5",
+      reasoning: true,
+    });
+    state.prompt.mockReset().mockImplementation(async () => {
+      state.sessionListener?.({ type: "agent_end" });
+    });
+
+    const { agentService } =
+      await import("../../electron/main/services/agentService");
+
+    await agentService.send({
+      scope: { type: "main" },
+      module: "main",
+      sessionId: "main-session",
+      requestId: "main-request-model-switch",
+      message: "继续当前会话",
+      model: "openai:gpt-5",
+    });
+
+    expect(state.continueRecent).toHaveBeenCalledTimes(1);
+    expect(state.createSessionManager).not.toHaveBeenCalled();
+    expect(state.createAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionManager: continuedSessionManager,
+      }),
+    );
+  });
+
+  it("uses the scope-specific saved model when no payload model is provided", async () => {
+    state.getClaudeStatus.mockReset().mockResolvedValue({
+      allEnabledModels: [{ provider: "anthropic", modelId: "claude-test" }],
+      providers: {
+        anthropic: {
+          apiKey: "anthropic-key",
+        },
+        openai: {
+          apiKey: "openai-key",
+        },
+      },
+      lastSelectedModel: "openai:gpt-5-mini",
+      lastSelectedThinkingLevel: "high",
+    });
+    state.getModel.mockReset().mockReturnValue({
+      provider: "openai",
+      modelId: "gpt-5-mini",
+      reasoning: true,
+    });
+    state.prompt.mockReset().mockImplementation(async () => {
+      state.sessionListener?.({ type: "agent_end" });
+    });
+
+    const { agentService } =
+      await import("../../electron/main/services/agentService");
+
+    await agentService.send({
+      scope: { type: "project", projectId: "agent-a" },
+      module: "docs",
+      sessionId: "sub-session-saved-model",
+      requestId: "sub-request-saved-model",
+      message: "继续处理这个任务",
+    });
+
+    expect(state.getClaudeStatus).toHaveBeenCalledWith({
+      type: "project",
+      projectId: "agent-a",
+    });
+    expect(state.getModel).toHaveBeenCalledWith("openai", "gpt-5-mini");
+  });
 });
