@@ -1413,7 +1413,7 @@ const createOrResumeSession = async (
     effectiveModelId,
   );
   if (!model) {
-    throw new Error(`未找到模型：${effectiveProvider}:${effectiveModelId}`);
+    throw new Error(`Model not found: ${effectiveProvider}:${effectiveModelId}`);
   }
 
   // Create coding tools configured for the project directory
