@@ -1,71 +1,14 @@
+import { detectMarkdownMediaKindFromSource } from "@shared/utils/markdownMedia";
+
 const LOCAL_MEDIA_SCHEME_PREFIX = "kian-local://local/";
 const WINDOWS_ABS = /^[a-zA-Z]:[\\/]/;
 const UNSAFE_URL = /^(?:javascript|vbscript):/i;
 const PASSTHROUGH_URL = /^(?:https?|file|data|blob|mailto|tel|kian-local):/i;
 
-const IMAGE_EXTS = new Set([
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".webp",
-  ".bmp",
-  ".svg",
-  ".heic",
-  ".heif",
-]);
-const VIDEO_EXTS = new Set([
-  ".mp4",
-  ".mov",
-  ".m4v",
-  ".webm",
-  ".avi",
-  ".mkv",
-  ".flv",
-  ".wmv",
-  ".m3u8",
-]);
-const AUDIO_EXTS = new Set([
-  ".mp3",
-  ".wav",
-  ".m4a",
-  ".aac",
-  ".flac",
-  ".ogg",
-  ".opus",
-]);
-
 export type DocMediaKind = "image" | "video" | "audio" | null;
 
-const splitPathSuffix = (value: string): { path: string; suffix: string } => {
-  const hashIndex = value.indexOf("#");
-  const queryIndex = value.indexOf("?");
-  const suffixIndex =
-    hashIndex < 0
-      ? queryIndex
-      : queryIndex < 0
-        ? hashIndex
-        : Math.min(hashIndex, queryIndex);
-
-  if (suffixIndex < 0) {
-    return { path: value, suffix: "" };
-  }
-
-  return {
-    path: value.slice(0, suffixIndex),
-    suffix: value.slice(suffixIndex),
-  };
-};
-
 export const detectDocMediaKind = (src: string): DocMediaKind => {
-  const { path } = splitPathSuffix(src);
-  const dot = path.lastIndexOf(".");
-  if (dot <= 0) return null;
-  const ext = path.slice(dot).toLowerCase();
-  if (IMAGE_EXTS.has(ext)) return "image";
-  if (VIDEO_EXTS.has(ext)) return "video";
-  if (AUDIO_EXTS.has(ext)) return "audio";
-  return null;
+  return detectMarkdownMediaKindFromSource(src);
 };
 
 export const isDocPassthroughUrl = (rawUrl: string): boolean =>

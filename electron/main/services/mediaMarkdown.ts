@@ -1,5 +1,9 @@
 import path from 'node:path';
 import type { ChatAttachmentDTO, ChatScope } from '@shared/types';
+import {
+  detectMarkdownMediaKindFromSource,
+  rewriteBareRemoteMediaUrlsInMarkdown,
+} from '@shared/utils/markdownMedia';
 import { INTERNAL_ROOT, WORKSPACE_ROOT } from './workspacePaths';
 
 export type MediaKind = 'image' | 'video' | 'audio';
@@ -98,20 +102,19 @@ export const buildAttachmentMarkdown = (filePath: string): string =>
   buildExtendedMarkdown('attachment', filePath);
 
 export const detectMediaKindFromPath = (filePath: string): MediaKind | null => {
-  const normalized = normalizePathLike(filePath);
-  if (!normalized) return null;
-  const ext = path.extname(normalized).toLowerCase();
-  if (IMAGE_EXTENSIONS.has(ext)) return 'image';
-  if (VIDEO_EXTENSIONS.has(ext)) return 'video';
-  if (AUDIO_EXTENSIONS.has(ext)) return 'audio';
-  return null;
+  return detectMarkdownMediaKindFromSource(filePath);
 };
 
 export const normalizeMediaMarkdownInText = (content: string): string => {
   if (!content.trim()) return content;
 
+  const rewrittenRemoteMedia = rewriteBareRemoteMediaUrlsInMarkdown(
+    content,
+    (kind, url) => buildMediaMarkdown(kind, url)
+  );
+
   let inFenceBlock = false;
-  const lines = content.split('\n').map((line) => {
+  const lines = rewrittenRemoteMedia.split('\n').map((line) => {
     const trimmed = line.trimStart();
     if (trimmed.startsWith('```')) {
       inFenceBlock = !inFenceBlock;

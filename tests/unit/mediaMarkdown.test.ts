@@ -49,6 +49,28 @@ describe('normalizeMediaMarkdownInText', () => {
     expect(output).toContain('@[video](C:\\\\temp\\\\clips\\\\demo.mp4)');
   });
 
+  it('converts bare remote image url to extended markdown', () => {
+    const input = '封面：https://cdn.example.com/assets/poster.png?size=large';
+    const output = normalizeMediaMarkdownInText(input);
+    expect(output).toContain(
+      '@[image](https://cdn.example.com/assets/poster.png?size=large)',
+    );
+  });
+
+  it('converts bare remote audio url and preserves trailing punctuation', () => {
+    const input = '试听地址：https://cdn.example.com/audio/demo.m4a?t=12。';
+    const output = normalizeMediaMarkdownInText(input);
+    expect(output).toBe(
+      '试听地址：@[audio](https://cdn.example.com/audio/demo.m4a?t=12)。',
+    );
+  });
+
+  it('keeps remote media url inside markdown destination unchanged', () => {
+    const input = '[试听](https://cdn.example.com/audio/demo.m4a?t=12)';
+    const output = normalizeMediaMarkdownInText(input);
+    expect(output).toBe(input);
+  });
+
   it('builds file markdown syntax', () => {
     expect(buildFileMarkdown('/tmp/demo.txt')).toBe('@[file](/tmp/demo.txt)');
   });

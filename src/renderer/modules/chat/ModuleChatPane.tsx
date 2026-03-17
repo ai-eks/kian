@@ -37,6 +37,11 @@ import {
   buildUserRequestMetadataJson,
   hasPersistedPendingUserMessage,
 } from "@shared/utils/chatPendingMessage";
+import {
+  detectMarkdownMediaKindFromSource,
+  rewriteBareRemoteMediaUrlsInMarkdown,
+  type MarkdownMediaKind,
+} from "@shared/utils/markdownMedia";
 import { DEFAULT_SHORTCUT_CONFIG } from "@shared/utils/shortcuts";
 import {
   useMutation,
@@ -249,7 +254,6 @@ const TEXT_PREVIEW_MAX_CHARS = 6_000;
 const TEXT_PREVIEW_MAX_LINES = 80;
 const LEGACY_CHAT_INPUT_SHORTCUT_TIP_DISMISSED_STORAGE_KEY =
   "kian.chat.input-shortcut-tip.dismissed";
-type MarkdownMediaKind = "image" | "video" | "audio";
 type ExtendedMarkdownKind = MarkdownMediaKind | "file" | "attachment";
 
 const isChatThinkingLevel = (value: string): value is ChatThinkingLevel =>
@@ -410,7 +414,10 @@ const normalizeFencedCodeBlocks = (content: string): string =>
   );
 
 const preprocessExtendedMediaMarkdown = (content: string): string =>
-  normalizeFencedCodeBlocks(repairCorruptedRelativeMediaPaths(content)).replace(
+  rewriteBareRemoteMediaUrlsInMarkdown(
+    normalizeFencedCodeBlocks(repairCorruptedRelativeMediaPaths(content)),
+    (kind, url) => buildExtendedMarkdown(kind, url),
+  ).replace(
     EXTENDED_MEDIA_PATTERN,
     (_full, kindRaw: string, sizeRaw: string | undefined, pathRaw: string) => {
       const kind = kindRaw.toLowerCase() as ExtendedMarkdownKind;
@@ -791,12 +798,12 @@ const MarkdownMessage = memo(
                 String(alt ?? ""),
               );
               const altKind = cleanAlt.trim().toLowerCase();
+              const rawSourcePath = extended?.sourcePath ?? source;
               const mediaKind =
                 extended?.kind ??
                 (altKind === "video" || altKind === "audio"
                   ? altKind
-                  : "image");
-              const rawSourcePath = extended?.sourcePath ?? source;
+                  : (detectMarkdownMediaKindFromSource(rawSourcePath) ?? "image"));
               const resolvedSource = resolveRenderableUrl(
                 rawSourcePath,
                 projectId,

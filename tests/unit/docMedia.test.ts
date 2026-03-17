@@ -10,6 +10,7 @@ describe("docMedia", () => {
     expect(detectDocMediaKind("poster.png")).toBe("image");
     expect(detectDocMediaKind("clip.mp4?download=1")).toBe("video");
     expect(detectDocMediaKind("voice.m4a#t=2")).toBe("audio");
+    expect(detectDocMediaKind("https://cdn.example.com/live/demo.webm?download=1")).toBe("video");
     expect(detectDocMediaKind("note.md")).toBeNull();
   });
 

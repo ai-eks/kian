@@ -4,7 +4,10 @@ import { RevealableImage } from "@renderer/components/RevealableImage";
 import { api } from "@renderer/lib/api";
 import { openUrl } from "@renderer/lib/openUrl";
 import {
-  detectDocMediaKind,
+  detectMarkdownMediaKindFromSource,
+  rewriteBareRemoteMediaUrlsInMarkdown,
+} from "@shared/utils/markdownMedia";
+import {
   isDocPassthroughUrl,
   resolveDocLocalUrl,
 } from "@renderer/modules/docs/docMedia";
@@ -57,7 +60,10 @@ const EXTENDED_MEDIA_RE =
   /@\[(image|video|audio)(?:\|([^\]]*))?\]\(([^)\n]+)\)/gi;
 
 const preprocessExtendedMedia = (content: string): string =>
-  content.replace(
+  rewriteBareRemoteMediaUrlsInMarkdown(
+    content,
+    (kind, path) => `@[${kind}](${path})`,
+  ).replace(
     EXTENDED_MEDIA_RE,
     (_full, kind: string, size: string | undefined, path: string) => {
       const sizeSuffix = size ? `|${size}` : "";
@@ -407,7 +413,7 @@ export const MarkdownEditor = ({
                       const kind =
                         altKind === "video" || altKind === "audio"
                           ? altKind
-                          : (detectDocMediaKind(raw) ?? "image");
+                          : (detectMarkdownMediaKindFromSource(raw) ?? "image");
                       if (kind === "video") {
                         return (
                           <video
@@ -433,7 +439,7 @@ export const MarkdownEditor = ({
                         <RevealableImage
                           src={resolved}
                           alt={cleanAlt || "image"}
-                          filePath={raw}
+                          filePath={isDocPassthroughUrl(raw) ? undefined : raw}
                           projectId={projectId}
                           documentPath={documentPath}
                           className="chat-markdown__media chat-markdown__media--image"
