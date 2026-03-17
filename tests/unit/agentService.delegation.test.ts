@@ -23,6 +23,7 @@ const state = vi.hoisted(() => ({
   getMcpServers: vi.fn(),
   getAgentSystemPrompt: vi.fn(),
   getClaudeSecret: vi.fn(),
+  resolveAgentModel: vi.fn(),
   listActiveSkillsForScope: vi.fn(),
   buildSessionSystemPrompt: vi.fn(),
   buildMcpServerSignature: vi.fn(),
@@ -46,7 +47,6 @@ vi.mock("electron", () => ({
 }));
 
 vi.mock("@mariozechner/pi-ai", () => ({
-  getModel: (...args: unknown[]) => state.getModel(...args),
   Type: {
     Object: (value: unknown) => value,
     Optional: (value: unknown) => value,
@@ -117,6 +117,7 @@ vi.mock("../../electron/main/services/settingsService", () => ({
     getAgentSystemPrompt: (...args: unknown[]) =>
       state.getAgentSystemPrompt(...args),
     getClaudeSecret: (...args: unknown[]) => state.getClaudeSecret(...args),
+    resolveAgentModel: (...args: unknown[]) => state.resolveAgentModel(...args),
   },
 }));
 
@@ -215,9 +216,17 @@ describe("agentService delegation reporting", () => {
       name: "Agent A",
     });
     state.setChatSessionSdkSessionId.mockReset().mockResolvedValue(undefined);
-    state.getModel.mockReset().mockReturnValue({
+    state.resolveAgentModel.mockReset().mockResolvedValue({
       provider: "anthropic",
-      modelId: "claude-test",
+      id: "claude-test",
+      api: "anthropic-messages",
+      baseUrl: "https://api.anthropic.com",
+      name: "Claude Test",
+      reasoning: true,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 8192,
     });
     state.continueRecent.mockReset().mockReturnValue({
       buildSessionContext: () => ({ model: null }),

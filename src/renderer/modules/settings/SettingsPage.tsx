@@ -12,6 +12,7 @@ import {
 } from "@renderer/lib/shortcuts";
 import type {
   AppUpdateStatusDTO,
+  CustomAgentModelConfigDTO,
   KeyboardShortcutDTO,
   ShortcutConfigDTO,
 } from "@shared/types";
@@ -46,12 +47,28 @@ const SETTINGS_TABS = [
   "about",
 ] as const;
 
+const CUSTOM_API_PROVIDER = "custom-api";
+
+const CUSTOM_MODEL_API_OPTIONS = [
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+  "mistral-conversations",
+  "google-generative-ai",
+  "google-gemini-cli",
+  "google-vertex",
+  "azure-openai-responses",
+  "openai-codex-responses",
+  "bedrock-converse-stream",
+] as const;
+
 const KNOWN_PROVIDER_META: Record<
   string,
   { keyLabel: string; keyPlaceholder: string }
 > = {
   anthropic: { keyLabel: "API Key", keyPlaceholder: "sk-ant-..." },
   openrouter: { keyLabel: "API Key", keyPlaceholder: "sk-or-..." },
+  "custom-api": { keyLabel: "API Key", keyPlaceholder: "sk-..." },
   openai: { keyLabel: "API Key", keyPlaceholder: "sk-..." },
   google: { keyLabel: "API Key", keyPlaceholder: "AIza..." },
   mistral: { keyLabel: "API Key", keyPlaceholder: "sk-..." },
@@ -146,11 +163,75 @@ const getUpdateStageLabel = (
   }
 };
 
+const DEFAULT_CUSTOM_MODEL_FORM_VALUE = (): CustomModelFormValue => ({
+  id: "",
+  name: "",
+  reasoning: false,
+  supportsImage: false,
+  contextWindow: 128000,
+  maxTokens: 16384,
+});
+
+const customModelFormValueFromConfig = (
+  model: CustomAgentModelConfigDTO,
+): CustomModelFormValue => ({
+  id: model.id,
+  name: model.name ?? "",
+  reasoning: model.reasoning,
+  supportsImage: model.input.includes("image"),
+  contextWindow: model.contextWindow,
+  maxTokens: model.maxTokens,
+});
+
+const normalizeCustomModelFormValues = (
+  values: CustomModelFormValue[],
+): CustomAgentModelConfigDTO[] =>
+  values
+    .map((value) => ({
+      id: String(value.id ?? "").trim(),
+      name: String(value.name ?? "").trim() || undefined,
+      reasoning: Boolean(value.reasoning),
+      input: value.supportsImage
+        ? (["text", "image"] as Array<"text" | "image">)
+        : (["text"] as Array<"text" | "image">),
+      contextWindow: Number(value.contextWindow ?? 0),
+      maxTokens: Number(value.maxTokens ?? 0),
+    }))
+    .filter((value) => value.id.length > 0);
+
+const customModelConfigSignature = (
+  values: CustomAgentModelConfigDTO[],
+): string =>
+  values
+    .map((value) =>
+      [
+        value.id,
+        value.name ?? "",
+        value.reasoning ? "1" : "0",
+        value.input.join(","),
+        value.contextWindow,
+        value.maxTokens,
+      ].join(":"),
+    )
+    .join("|");
+
 type ClaudeFormValues = {
   provider: string;
   enabled: boolean;
   secret?: string;
+  baseUrl?: string;
+  api?: string;
+  customModels: CustomModelFormValue[];
   enabledModels: string[];
+};
+
+type CustomModelFormValue = {
+  id: string;
+  name?: string;
+  reasoning: boolean;
+  supportsImage: boolean;
+  contextWindow: number;
+  maxTokens: number;
 };
 
 type ProviderFormValues = {
@@ -368,12 +449,23 @@ export const SettingsPage = () => {
     preserve: true,
   }) ?? "anthropic") as string;
   const providerMeta = getProviderMeta(provider);
+  const isCustomApiProvider = provider === CUSTOM_API_PROVIDER;
   const providerEnabled =
     Form.useWatch("enabled", { form: claudeForm, preserve: true }) ?? false;
   const secretValue = Form.useWatch("secret", {
     form: claudeForm,
     preserve: true,
   });
+  const baseUrlValue = Form.useWatch("baseUrl", {
+    form: claudeForm,
+    preserve: true,
+  });
+  const apiValue = Form.useWatch("api", {
+    form: claudeForm,
+    preserve: true,
+  });
+  const customModelsValue =
+    Form.useWatch("customModels", { form: claudeForm, preserve: true }) ?? [];
   const enabledModelsValue =
     Form.useWatch("enabledModels", { form: claudeForm, preserve: true }) ?? [];
   const providerSecretValue = Form.useWatch("secret", {
@@ -505,6 +597,9 @@ export const SettingsPage = () => {
         provider: values.provider,
         enabled: values.enabled,
         secret: values.secret,
+        baseUrl: values.baseUrl,
+        api: values.api,
+        customModels: normalizeCustomModelFormValues(values.customModels ?? []),
         enabledModels: values.enabledModels,
       }),
   });
@@ -606,6 +701,11 @@ export const SettingsPage = () => {
       provider: effectiveProvider,
       enabled: providerConfig?.enabled ?? false,
       secret: providerConfig?.apiKey ?? "",
+      baseUrl: providerConfig?.baseUrl ?? "",
+      api: providerConfig?.api ?? undefined,
+      customModels: (providerConfig?.customModels ?? []).map(
+        customModelFormValueFromConfig,
+      ),
       enabledModels: providerConfig?.enabledModels ?? [],
     });
   }, [claudeForm, claudeStatusQuery.data, provider, sortedProviders]);
@@ -677,6 +777,10 @@ export const SettingsPage = () => {
 
   const secretText = String(secretValue ?? "").trim();
   const tokenFilled = Boolean(secretText);
+  const baseUrlText = String(baseUrlValue ?? "").trim();
+  const apiText = String(apiValue ?? "").trim();
+  const normalizedCustomModels = normalizeCustomModelFormValues(customModelsValue);
+  const customModelsFilled = normalizedCustomModels.length > 0;
 
   const providerSecretText = String(providerSecretValue ?? "").trim();
   const hasInputProviderToken = Boolean(providerSecretText);
@@ -762,9 +866,16 @@ export const SettingsPage = () => {
   const savedEnabledAgentModels = normalizeIdList(
     currentProviderConfig?.enabledModels ?? [],
   );
+  const savedCustomModelSignature = customModelConfigSignature(
+    currentProviderConfig?.customModels ?? [],
+  );
   const claudeDirty = claudeStatus
     ? providerEnabled !== (currentProviderConfig?.enabled ?? false) ||
       secretText !== (currentProviderConfig?.apiKey ?? "") ||
+      baseUrlText !== String(currentProviderConfig?.baseUrl ?? "") ||
+      apiText !== String(currentProviderConfig?.api ?? "") ||
+      customModelConfigSignature(normalizedCustomModels) !==
+        savedCustomModelSignature ||
       !isSameStringArray(normalizedEnabledAgentModels, savedEnabledAgentModels)
     : false;
   const providerDirty = providerStatus
@@ -887,6 +998,9 @@ export const SettingsPage = () => {
           provider: values.provider,
           enabled: values.enabled,
           secret: normalizedSecret || undefined,
+          baseUrl: String(values.baseUrl ?? "").trim() || undefined,
+          api: String(values.api ?? "").trim() || undefined,
+          customModels: normalizeCustomModelFormValues(values.customModels ?? []),
           enabledModels: values.enabledModels,
         });
       },
@@ -1030,6 +1144,9 @@ export const SettingsPage = () => {
         provider,
         providerEnabled,
         secretText,
+        baseUrlText,
+        apiText,
+        customModelConfigSignature(normalizedCustomModels),
         normalizedEnabledAgentModels.join(","),
         providerSecretText,
         normalizedEnabledModels.join(","),
@@ -1058,6 +1175,9 @@ export const SettingsPage = () => {
       provider,
       providerEnabled,
       secretText,
+      baseUrlText,
+      apiText,
+      normalizedCustomModels,
       normalizedEnabledAgentModels,
       providerSecretText,
       normalizedEnabledModels,
@@ -1426,8 +1546,9 @@ export const SettingsPage = () => {
                       语言模型
                     </Typography.Title>
                     <Typography.Paragraph className="!text-slate-600">
-                      选择 Provider 标签页来切换接入方式，配置对应的 API Key
-                      并启用模型。
+                        {t(
+                        "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。",
+                      )}
                     </Typography.Paragraph>
 
                     <Form
@@ -1436,6 +1557,7 @@ export const SettingsPage = () => {
                       initialValues={{
                         provider: "anthropic",
                         enabled: false,
+                        customModels: [],
                         enabledModels: [],
                       }}
                     >
@@ -1452,6 +1574,11 @@ export const SettingsPage = () => {
                             provider: nextProvider,
                             enabled: pConfig?.enabled ?? false,
                             secret: pConfig?.apiKey ?? "",
+                            baseUrl: pConfig?.baseUrl ?? "",
+                            api: pConfig?.api ?? undefined,
+                            customModels: (pConfig?.customModels ?? []).map(
+                              customModelFormValueFromConfig,
+                            ),
                             enabledModels: pConfig?.enabledModels ?? [],
                           });
                         }}
@@ -1519,6 +1646,210 @@ export const SettingsPage = () => {
                           />
                         </Form.Item>
 
+                        {isCustomApiProvider ? (
+                          <>
+                            <Typography.Paragraph className="!text-slate-600">
+                              {t(
+                                "填写 URL 后会将当前 Provider 的请求路由到该地址；配置自定义模型后，这些模型会出现在下面的启用模型列表中。",
+                              )}
+                            </Typography.Paragraph>
+
+                            <Form.Item
+                              name="baseUrl"
+                              label={getFieldLabel(
+                                "自定义 URL",
+                                Boolean(baseUrlText),
+                              )}
+                              extra="留空表示使用 Provider 默认地址；填写后会把当前 Provider 的请求路由到该地址。"
+                              rules={[
+                                {
+                                  validator: async (_, value) => {
+                                    const trimmed = String(value ?? "").trim();
+                                    if (!trimmed) {
+                                      return Promise.resolve();
+                                    }
+                                    try {
+                                      const parsed = new URL(trimmed);
+                                      if (
+                                        parsed.protocol === "http:" ||
+                                        parsed.protocol === "https:"
+                                      ) {
+                                        return Promise.resolve();
+                                      }
+                                    } catch {
+                                      // handled below
+                                    }
+                                    return Promise.reject(
+                                      new Error(
+                                        "URL 必须是合法的 http/https 地址",
+                                      ),
+                                    );
+                                  },
+                                },
+                              ]}
+                            >
+                              <Input placeholder="https://api.example.com/v1" />
+                            </Form.Item>
+
+                            <Form.Item
+                              name="api"
+                              label={getFieldLabel(
+                                "自定义模型 API 类型",
+                                Boolean(apiText),
+                              )}
+                              extra="仅在添加自定义模型时需要选择。"
+                              rules={[
+                                {
+                                  validator: async (_, value) => {
+                                    const customModels =
+                                      normalizeCustomModelFormValues(
+                                        (claudeForm.getFieldValue(
+                                          "customModels",
+                                        ) as
+                                          | CustomModelFormValue[]
+                                          | undefined) ?? [],
+                                      );
+                                    const trimmed = String(value ?? "").trim();
+                                    if (customModels.length === 0 || trimmed) {
+                                      return Promise.resolve();
+                                    }
+                                    return Promise.reject(
+                                      new Error(
+                                        "配置自定义模型时必须选择 API 类型",
+                                      ),
+                                    );
+                                  },
+                                },
+                              ]}
+                            >
+                              <Select
+                                allowClear
+                                placeholder="请选择"
+                                options={CUSTOM_MODEL_API_OPTIONS.map((value) => ({
+                                  label: value,
+                                  value,
+                                }))}
+                              />
+                            </Form.Item>
+
+                            <Form.List name="customModels">
+                              {(fields, { add, remove }) => (
+                                <Form.Item
+                                  label={getFieldLabel(
+                                    "自定义模型",
+                                    customModelsFilled,
+                                  )}
+                                  extra="配置后会直接作为当前 Provider 的模型列表。"
+                                  className="[&_.ant-form-item-label>label]:after:!content-none"
+                                >
+                                  <div className="flex flex-col gap-3">
+                                    {fields.map((field) => (
+                                      <div
+                                        key={field.key}
+                                        className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+                                      >
+                                        <div className="mb-3 flex items-center justify-between gap-3">
+                                          <Typography.Text strong>
+                                            {t(`自定义模型 ${field.name + 1}`)}
+                                          </Typography.Text>
+                                          <Button
+                                            size="small"
+                                            type="text"
+                                            danger
+                                            onClick={() => remove(field.name)}
+                                          >
+                                            {t("删除")}
+                                          </Button>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                          <Form.Item
+                                            {...field}
+                                            name={[field.name, "id"]}
+                                            label="模型 ID"
+                                            rules={[
+                                              {
+                                                required: true,
+                                                message: "Model ID 不能为空",
+                                              },
+                                            ]}
+                                          >
+                                            <Input placeholder="gpt-4.1-mini" />
+                                          </Form.Item>
+                                          <Form.Item
+                                            {...field}
+                                            name={[field.name, "name"]}
+                                            label="显示名称"
+                                          >
+                                            <Input placeholder="留空则使用 Model ID" />
+                                          </Form.Item>
+                                          <Form.Item
+                                            {...field}
+                                            name={[field.name, "contextWindow"]}
+                                            label="上下文窗口"
+                                            rules={[
+                                              {
+                                                required: true,
+                                                message: "上下文窗口不能为空",
+                                              },
+                                            ]}
+                                          >
+                                            <Input type="number" min={1} />
+                                          </Form.Item>
+                                          <Form.Item
+                                            {...field}
+                                            name={[field.name, "maxTokens"]}
+                                            label="最大输出 Token"
+                                            rules={[
+                                              {
+                                                required: true,
+                                                message: "最大输出 Token 不能为空",
+                                              },
+                                            ]}
+                                          >
+                                            <Input type="number" min={1} />
+                                          </Form.Item>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                          <Form.Item
+                                            {...field}
+                                            name={[field.name, "reasoning"]}
+                                            label="支持推理"
+                                            valuePropName="checked"
+                                          >
+                                            <Switch
+                                              checkedChildren="是"
+                                              unCheckedChildren="否"
+                                            />
+                                          </Form.Item>
+                                          <Form.Item
+                                            {...field}
+                                            name={[field.name, "supportsImage"]}
+                                            label="支持图片输入"
+                                            valuePropName="checked"
+                                          >
+                                            <Switch
+                                              checkedChildren="是"
+                                              unCheckedChildren="否"
+                                            />
+                                          </Form.Item>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    <Button
+                                      type="dashed"
+                                      onClick={() =>
+                                        add(DEFAULT_CUSTOM_MODEL_FORM_VALUE())
+                                      }
+                                    >
+                                      {t("新增自定义模型")}
+                                    </Button>
+                                  </div>
+                                </Form.Item>
+                              )}
+                            </Form.List>
+                          </>
+                        ) : null}
+
                         <Form.Item
                           name="enabledModels"
                           label={
@@ -1555,7 +1886,7 @@ export const SettingsPage = () => {
                               (m) => ({
                                 id: m.id,
                                 title: m.name,
-                                description: `${m.id} · ctx ${Math.round(m.contextWindow / 1024)}k · max ${Math.round(m.maxTokens / 1024)}k${m.reasoning ? " · reasoning" : ""}`,
+                                description: `${m.id} · ctx ${Math.round(m.contextWindow / 1024)}k · max ${Math.round(m.maxTokens / 1024)}k${m.reasoning ? " · reasoning" : ""}${m.source === "custom" ? ` · ${t("自定义")}` : ""}`,
                               }),
                             )}
                             empty={

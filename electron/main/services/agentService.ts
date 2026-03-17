@@ -1,5 +1,4 @@
 import {
-  getModel,
   Type,
   type AssistantMessageEvent,
 } from "@mariozechner/pi-ai";
@@ -1409,11 +1408,13 @@ const createOrResumeSession = async (
     }
   }
 
-  // Resolve the model from pi-ai using provider + modelId
-  const model: ReturnType<typeof getModel> = getModel(
-    effectiveProvider as Parameters<typeof getModel>[0],
-    effectiveModelId as never,
+  const model = await settingsService.resolveAgentModel(
+    effectiveProvider,
+    effectiveModelId,
   );
+  if (!model) {
+    throw new Error(`未找到模型：${effectiveProvider}:${effectiveModelId}`);
+  }
 
   // Create coding tools configured for the project directory
   const tools = createCodingTools(projectCwd);

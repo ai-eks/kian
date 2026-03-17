@@ -336,12 +336,25 @@ export interface AgentModelDTO {
   reasoning: boolean;
   contextWindow: number;
   maxTokens: number;
+  source?: 'builtin' | 'custom';
+}
+
+export interface CustomAgentModelConfigDTO {
+  id: string;
+  name?: string;
+  reasoning: boolean;
+  input: Array<'text' | 'image'>;
+  contextWindow: number;
+  maxTokens: number;
 }
 
 export interface ProviderConfigEntry {
   configured: boolean;
   enabled: boolean;
   apiKey: string;
+  baseUrl?: string;
+  api?: string;
+  customModels: CustomAgentModelConfigDTO[];
   enabledModels: string[];
 }
 

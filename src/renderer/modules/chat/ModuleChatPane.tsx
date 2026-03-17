@@ -264,6 +264,26 @@ const stripProviderPrefixFromModelName = (modelName: string): string => {
   return nameOnly || trimmed;
 };
 
+const formatProviderLabel = (provider: string): string => {
+  switch (provider) {
+    case "openai":
+      return "OpenAI";
+    case "custom-api":
+      return "Custom API";
+    case "openai-compatible":
+      return "Custom API";
+    case "openrouter":
+      return "OpenRouter";
+    case "xai":
+      return "xAI";
+    default:
+      return provider
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
+};
+
 const getScopeKey = (scope: ChatScope): string =>
   scope.type === "main" ? "main" : scope.projectId;
 
@@ -2399,7 +2419,6 @@ export const ModuleChatPane = ({
           handleSend();
           return;
         }
-
         if (
           matchesKeyboardShortcut(
             event.nativeEvent,
@@ -2423,7 +2442,8 @@ export const ModuleChatPane = ({
       removeFileLabel={(fileName) => t(`移除文件 ${fileName}`)}
       selectedModel={selectedModel}
       modelOptions={enabledModels.map((m) => ({
-        label: stripProviderPrefixFromModelName(m.modelName),
+        label: `${formatProviderLabel(m.provider)} · ${stripProviderPrefixFromModelName(m.modelName)}`,
+        description: m.modelId,
         value: `${m.provider}:${m.modelId}`,
       }))}
       onModelChange={(value) => {
