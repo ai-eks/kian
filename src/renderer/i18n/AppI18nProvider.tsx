@@ -19,12 +19,19 @@ import {
   useRef,
   type PropsWithChildren,
 } from "react";
+import {
+  resolveTranslationState,
+  type TranslationState,
+} from "./translationState";
 import { translateUiText } from "./uiTranslations";
 
 type AppI18nContextValue = {
   language: AppLanguage;
   antdLocale: Locale;
 };
+
+type TextNodeTranslationState = TranslationState;
+type AttributeTranslationState = Map<string, TranslationState>;
 
 const ATTRIBUTES_TO_TRANSLATE = ["placeholder", "title", "aria-label", "alt"];
 const BLOCKED_TEXT_TAGS = new Set(["SCRIPT", "STYLE", "CODE", "PRE"]);
@@ -72,41 +79,43 @@ const shouldSkipAttributeElement = (element: Element | null): boolean => {
 
 const translateDocumentText = (
   language: AppLanguage,
-  textNodes: WeakMap<Text, string>,
-  attributeValues: WeakMap<Element, Map<string, string>>,
+  textNodes: WeakMap<Text, TextNodeTranslationState>,
+  attributeValues: WeakMap<Element, AttributeTranslationState>,
   root: ParentNode,
 ): void => {
   const applyToTextNode = (node: Text) => {
     if (shouldSkipTextElement(node.parentElement)) return;
-    const original = textNodes.get(node) ?? node.textContent ?? "";
-    if (!textNodes.has(node)) {
-      textNodes.set(node, original);
-    }
-    const translated = translateUiText(language, original);
-    if (node.textContent !== translated) {
-      node.textContent = translated;
+    const currentText = node.textContent ?? "";
+    const nextState = resolveTranslationState(
+      language,
+      currentText,
+      textNodes.get(node),
+    );
+    textNodes.set(node, nextState);
+    if (currentText !== nextState.translated) {
+      node.textContent = nextState.translated;
     }
   };
 
   const applyToAttributes = (element: Element) => {
     if (shouldSkipAttributeElement(element)) return;
-    const originalMap = attributeValues.get(element) ?? new Map<string, string>();
+    const attributeStateMap =
+      attributeValues.get(element) ?? new Map<string, { source: string; translated: string }>();
     for (const attribute of ATTRIBUTES_TO_TRANSLATE) {
       const currentValue = element.getAttribute(attribute);
       if (currentValue === null) continue;
-      if (!originalMap.has(attribute)) {
-        originalMap.set(attribute, currentValue);
-      }
-      const translated = translateUiText(
+      const nextState = resolveTranslationState(
         language,
-        originalMap.get(attribute) ?? currentValue,
+        currentValue,
+        attributeStateMap.get(attribute),
       );
-      if (currentValue !== translated) {
-        element.setAttribute(attribute, translated);
+      attributeStateMap.set(attribute, nextState);
+      if (currentValue !== nextState.translated) {
+        element.setAttribute(attribute, nextState.translated);
       }
     }
-    if (originalMap.size > 0) {
-      attributeValues.set(element, originalMap);
+    if (attributeStateMap.size > 0) {
+      attributeValues.set(element, attributeStateMap);
     }
   };
 
@@ -127,8 +136,8 @@ const translateDocumentText = (
 };
 
 const UiTextTranslator = ({ language }: { language: AppLanguage }) => {
-  const textNodesRef = useRef(new WeakMap<Text, string>());
-  const attributeValuesRef = useRef(new WeakMap<Element, Map<string, string>>());
+  const textNodesRef = useRef(new WeakMap<Text, TextNodeTranslationState>());
+  const attributeValuesRef = useRef(new WeakMap<Element, AttributeTranslationState>());
 
   useEffect(() => {
     if (!document.body) return;
