@@ -21,7 +21,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "build:mac": "node ./scripts/package-app.js --mac --config",
+    "build:mac": "node ./scripts/package-app.js --mac --universal --config",
     "build:win": "node ./scripts/package-app.js --win --config",
     "build:linux": "node ./scripts/package-app.js --linux --config",
     "preview": "electron-vite preview",
@@ -109,6 +109,7 @@
     "mac": {
       "icon": "icons/icon.icns",
       "category": "public.app-category.productivity",
+      "minimumSystemVersion": "12.0.0",
       "target": [
         "dmg",
         "zip"
