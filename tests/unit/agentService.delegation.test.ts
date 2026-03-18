@@ -821,10 +821,17 @@ describe("agentService delegation reporting", () => {
         },
       },
     });
-    state.getModel.mockReset().mockReturnValue({
+    state.resolveAgentModel.mockReset().mockResolvedValue({
       provider: "openai",
-      modelId: "gpt-5",
+      id: "gpt-5",
+      api: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+      name: "GPT-5",
       reasoning: true,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 8192,
     });
     state.prompt.mockReset().mockImplementation(async () => {
       state.sessionListener?.({ type: "agent_end" });
@@ -851,6 +858,64 @@ describe("agentService delegation reporting", () => {
     );
   });
 
+  it("rebuilds a reused session when the resolved model runtime config changes", async () => {
+    const oldRuntimeModel = {
+      provider: "custom-api",
+      id: "qwen3.5-small-9b",
+      api: "openai-completions",
+      baseUrl: "http://localhost:2276/v1/chat",
+      name: "Qwen",
+      reasoning: true,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 8192,
+      compat: { supportsDeveloperRole: false },
+    };
+    const newRuntimeModel = {
+      ...oldRuntimeModel,
+      baseUrl: "http://localhost:2276/v1",
+    };
+    state.resolveAgentModel.mockReset().mockImplementation(async () => {
+      const callIndex = state.resolveAgentModel.mock.calls.length;
+      return callIndex <= 2 ? oldRuntimeModel : newRuntimeModel;
+    });
+    state.getClaudeStatus.mockReset().mockResolvedValue({
+      allEnabledModels: [{ provider: "custom-api", modelId: "qwen3.5-small-9b" }],
+      providers: {
+        "custom-api": {
+          apiKey: "test-key",
+        },
+      },
+    });
+    state.prompt.mockReset().mockImplementation(async () => {
+      state.sessionListener?.({ type: "agent_end" });
+    });
+
+    const { agentService } =
+      await import("../../electron/main/services/agentService");
+
+    await agentService.send({
+      scope: { type: "main" },
+      module: "main",
+      sessionId: "main-session",
+      requestId: "main-request-old-runtime",
+      message: "first",
+      model: "custom-api:qwen3.5-small-9b",
+    });
+
+    await agentService.send({
+      scope: { type: "main" },
+      module: "main",
+      sessionId: "main-session",
+      requestId: "main-request-new-runtime",
+      message: "second",
+      model: "custom-api:qwen3.5-small-9b",
+    });
+
+    expect(state.createAgentSession).toHaveBeenCalledTimes(2);
+  });
+
   it("uses the scope-specific saved model when no payload model is provided", async () => {
     state.getClaudeStatus.mockReset().mockResolvedValue({
       allEnabledModels: [{ provider: "anthropic", modelId: "claude-test" }],
@@ -865,10 +930,17 @@ describe("agentService delegation reporting", () => {
       lastSelectedModel: "openai:gpt-5-mini",
       lastSelectedThinkingLevel: "high",
     });
-    state.getModel.mockReset().mockReturnValue({
+    state.resolveAgentModel.mockReset().mockResolvedValue({
       provider: "openai",
-      modelId: "gpt-5-mini",
+      id: "gpt-5-mini",
+      api: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+      name: "GPT-5 Mini",
       reasoning: true,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 200000,
+      maxTokens: 8192,
     });
     state.prompt.mockReset().mockImplementation(async () => {
       state.sessionListener?.({ type: "agent_end" });
@@ -889,6 +961,9 @@ describe("agentService delegation reporting", () => {
       type: "project",
       projectId: "agent-a",
     });
-    expect(state.getModel).toHaveBeenCalledWith("openai", "gpt-5-mini");
+    expect(state.resolveAgentModel).toHaveBeenCalledWith(
+      "openai",
+      "gpt-5-mini",
+    );
   });
 });

@@ -344,6 +344,7 @@ export interface AgentModelDTO {
   id: string;
   name: string;
   reasoning: boolean;
+  input: Array<'text' | 'image'>;
   contextWindow: number;
   maxTokens: number;
   source?: 'builtin' | 'custom';

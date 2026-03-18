@@ -440,6 +440,7 @@ describe("settingsService.getAgentSystemPrompt", () => {
         id: "gpt-4.1-custom",
         name: "GPT 4.1 Custom",
         reasoning: true,
+        input: ["text", "image"],
         contextWindow: 256000,
         maxTokens: 32768,
         source: "custom",

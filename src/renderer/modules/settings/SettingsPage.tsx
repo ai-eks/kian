@@ -11,9 +11,11 @@ import {
   keyboardShortcutFromEvent,
 } from "@renderer/lib/shortcuts";
 import type {
+  AgentModelDTO,
   AppUpdateStatusDTO,
   CustomAgentModelConfigDTO,
   KeyboardShortcutDTO,
+  ProviderConfigEntry,
   ShortcutConfigDTO,
 } from "@shared/types";
 import {
@@ -214,6 +216,18 @@ const customModelConfigSignature = (
       ].join(":"),
     )
     .join("|");
+
+const customModelConfigToAgentModel = (
+  model: CustomAgentModelConfigDTO,
+): AgentModelDTO => ({
+  id: model.id,
+  name: model.name ?? model.id,
+  reasoning: model.reasoning,
+  input: model.input,
+  contextWindow: model.contextWindow,
+  maxTokens: model.maxTokens,
+  source: "custom",
+});
 type ClaudeFormValues = {
   provider: string;
   enabled: boolean;
@@ -237,6 +251,55 @@ type ProviderFormValues = {
   secret?: string;
   enabledModels: string[];
 };
+
+const cloneCustomModelFormValues = (
+  values: CustomModelFormValue[],
+): CustomModelFormValue[] =>
+  values.map((value) => ({
+    id: String(value.id ?? ""),
+    name: String(value.name ?? ""),
+    reasoning: Boolean(value.reasoning),
+    supportsImage: Boolean(value.supportsImage),
+    contextWindow: Number(value.contextWindow ?? 0),
+    maxTokens: Number(value.maxTokens ?? 0),
+  }));
+
+const getClaudeFormValuesFromProviderConfig = (
+  provider: string,
+  providerConfig?: ProviderConfigEntry,
+): ClaudeFormValues => ({
+  provider,
+  enabled: providerConfig?.enabled ?? false,
+  secret: providerConfig?.apiKey ?? "",
+  baseUrl: providerConfig?.baseUrl ?? "",
+  api: providerConfig?.api ?? undefined,
+  customModels: (providerConfig?.customModels ?? []).map(
+    customModelFormValueFromConfig,
+  ),
+  enabledModels: providerConfig?.enabledModels ?? [],
+});
+
+const normalizeClaudeDraftValues = (
+  values: Partial<ClaudeFormValues>,
+  provider: string,
+): ClaudeFormValues => ({
+  provider,
+  enabled: Boolean(values.enabled),
+  secret: String(values.secret ?? ""),
+  baseUrl: String(values.baseUrl ?? ""),
+  api: String(values.api ?? "").trim() || undefined,
+  customModels: cloneCustomModelFormValues(values.customModels ?? []),
+  enabledModels: Array.isArray(values.enabledModels)
+    ? values.enabledModels.map((value) => String(value))
+    : [],
+});
+
+const getCustomModelIdsSignatureFromClaudeValues = (
+  values: ClaudeFormValues,
+): string =>
+  normalizeCustomModelFormValues(values.customModels)
+    .map((model) => model.id)
+    .join("|");
 
 type ChannelFormValues = {
   enabled: boolean;
@@ -520,6 +583,8 @@ export const SettingsPage = () => {
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
   const autoSaveInFlightRef = useRef(false);
   const aboutAutoCheckTriggeredRef = useRef(false);
+  const claudeProviderDraftsRef = useRef<Record<string, ClaudeFormValues>>({});
+  const previousCustomModelIdsSignatureRef = useRef<string | null>(null);
   const [broadcastChannelsDraft, setBroadcastChannelsDraft] = useState<
     BroadcastChannelDraft[]
   >([]);
@@ -674,6 +739,31 @@ export const SettingsPage = () => {
     });
   }, [availableProvidersQuery.data, claudeStatusQuery.data]);
 
+  const currentClaudeDraft = useMemo(
+    () =>
+      normalizeClaudeDraftValues(
+        {
+          provider,
+          enabled: providerEnabled,
+          secret: secretValue,
+          baseUrl: baseUrlValue,
+          api: apiValue,
+          customModels: customModelsValue,
+          enabledModels: enabledModelsValue,
+        },
+        provider,
+      ),
+    [
+      apiValue,
+      baseUrlValue,
+      customModelsValue,
+      enabledModelsValue,
+      provider,
+      providerEnabled,
+      secretValue,
+    ],
+  );
+
   useEffect(() => {
     if (!generalConfigQuery.data) return;
     generalForm.setFieldsValue({
@@ -689,24 +779,40 @@ export const SettingsPage = () => {
   }, [shortcutConfigQuery.data]);
 
   useEffect(() => {
+    if (!provider.trim()) return;
+    claudeProviderDraftsRef.current[provider] = currentClaudeDraft;
+  }, [currentClaudeDraft, provider]);
+
+  useEffect(() => {
     if (!claudeStatusQuery.data) return;
     const effectiveProvider =
       sortedProviders.length > 0 &&
       !sortedProviders.some((p) => p.id === provider)
         ? sortedProviders[0].id
         : provider;
-    const providerConfig = claudeStatusQuery.data.providers[effectiveProvider];
-    claudeForm.setFieldsValue({
-      provider: effectiveProvider,
-      enabled: providerConfig?.enabled ?? false,
-      secret: providerConfig?.apiKey ?? "",
-      baseUrl: providerConfig?.baseUrl ?? "",
-      api: providerConfig?.api ?? undefined,
-      customModels: (providerConfig?.customModels ?? []).map(
-        customModelFormValueFromConfig,
-      ),
-      enabledModels: providerConfig?.enabledModels ?? [],
-    });
+    const nextDrafts = { ...claudeProviderDraftsRef.current };
+    for (const sortedProvider of sortedProviders) {
+      if (!nextDrafts[sortedProvider.id]) {
+        nextDrafts[sortedProvider.id] = getClaudeFormValuesFromProviderConfig(
+          sortedProvider.id,
+          claudeStatusQuery.data.providers[sortedProvider.id],
+        );
+      }
+    }
+    const nextValues =
+      nextDrafts[effectiveProvider] ??
+      getClaudeFormValuesFromProviderConfig(
+        effectiveProvider,
+        claudeStatusQuery.data.providers[effectiveProvider],
+      );
+    nextDrafts[effectiveProvider] = normalizeClaudeDraftValues(
+      nextValues,
+      effectiveProvider,
+    );
+    claudeProviderDraftsRef.current = nextDrafts;
+    claudeForm.setFieldsValue(nextDrafts[effectiveProvider]);
+    previousCustomModelIdsSignatureRef.current =
+      getCustomModelIdsSignatureFromClaudeValues(nextDrafts[effectiveProvider]);
   }, [claudeForm, claudeStatusQuery.data, provider, sortedProviders]);
 
   useEffect(() => {
@@ -774,7 +880,66 @@ export const SettingsPage = () => {
   const baseUrlText = String(baseUrlValue ?? "").trim();
   const apiText = String(apiValue ?? "").trim();
   const normalizedCustomModels = normalizeCustomModelFormValues(customModelsValue);
+  const customModelIds = normalizedCustomModels.map((model) => model.id);
+  const customModelIdsSignature = customModelIds.join("|");
   const customModelsFilled = normalizedCustomModels.length > 0;
+  const availableAgentModels = useMemo(
+    () =>
+      isCustomApiProvider
+        ? normalizedCustomModels.map(customModelConfigToAgentModel)
+        : (availableModelsQuery.data ?? []),
+    [availableModelsQuery.data, isCustomApiProvider, normalizedCustomModels],
+  );
+
+  useEffect(() => {
+    if (!isCustomApiProvider) {
+      previousCustomModelIdsSignatureRef.current = customModelIdsSignature;
+      return;
+    }
+    if (previousCustomModelIdsSignatureRef.current === null) {
+      previousCustomModelIdsSignatureRef.current = customModelIdsSignature;
+      return;
+    }
+
+    if (previousCustomModelIdsSignatureRef.current === customModelIdsSignature) {
+      return;
+    }
+
+    const previousIds = previousCustomModelIdsSignatureRef.current
+      .split("|")
+      .filter(Boolean);
+    const addedIds = customModelIds.filter((id) => !previousIds.includes(id));
+    const removedIds = previousIds.filter((id) => !customModelIds.includes(id));
+    previousCustomModelIdsSignatureRef.current = customModelIdsSignature;
+
+    if (addedIds.length === 0 && removedIds.length === 0) {
+      return;
+    }
+
+    const currentEnabledModels =
+      ((claudeForm.getFieldValue("enabledModels") as string[] | undefined) ?? []);
+    const nextEnabledModels = currentEnabledModels.filter(
+      (modelId) => !removedIds.includes(modelId),
+    );
+
+    for (const modelId of addedIds) {
+      if (!nextEnabledModels.includes(modelId)) {
+        nextEnabledModels.push(modelId);
+      }
+    }
+
+    const changed =
+      nextEnabledModels.length !== currentEnabledModels.length ||
+      nextEnabledModels.some(
+        (modelId, index) => modelId !== currentEnabledModels[index],
+      );
+
+    if (changed) {
+      claudeForm.setFieldsValue({
+        enabledModels: nextEnabledModels,
+      });
+    }
+  }, [claudeForm, customModelIds, customModelIdsSignature, isCustomApiProvider]);
 
   const providerSecretText = String(providerSecretValue ?? "").trim();
   const hasInputProviderToken = Boolean(providerSecretText);
@@ -988,15 +1153,16 @@ export const SettingsPage = () => {
       async () => {
         const values = claudeForm.getFieldsValue(true) as ClaudeFormValues;
         const normalizedSecret = values.secret?.trim();
-        await saveClaudeMutation.mutateAsync({
+        const payload: ClaudeFormValues = {
           provider: values.provider,
           enabled: values.enabled,
           secret: normalizedSecret || undefined,
           baseUrl: String(values.baseUrl ?? "").trim() || undefined,
           api: String(values.api ?? "").trim() || undefined,
-          customModels: normalizeCustomModelFormValues(values.customModels ?? []),
+          customModels: cloneCustomModelFormValues(values.customModels ?? []),
           enabledModels: values.enabledModels,
-        });
+        };
+        await saveClaudeMutation.mutateAsync(payload);
       },
       claudeStatusQuery.refetch,
     );
@@ -1562,19 +1728,28 @@ export const SettingsPage = () => {
                       <Tabs
                         activeKey={provider}
                         onChange={(nextProvider) => {
-                          const pConfig =
-                            claudeStatusQuery.data?.providers[nextProvider];
-                          claudeForm.setFieldsValue({
-                            provider: nextProvider,
-                            enabled: pConfig?.enabled ?? false,
-                            secret: pConfig?.apiKey ?? "",
-                            baseUrl: pConfig?.baseUrl ?? "",
-                            api: pConfig?.api ?? undefined,
-                            customModels: (pConfig?.customModels ?? []).map(
-                              customModelFormValueFromConfig,
-                            ),
-                            enabledModels: pConfig?.enabledModels ?? [],
-                          });
+                          if (provider.trim()) {
+                            claudeProviderDraftsRef.current[provider] =
+                              currentClaudeDraft;
+                          }
+                          const nextValues =
+                            claudeProviderDraftsRef.current[nextProvider] ??
+                            getClaudeFormValuesFromProviderConfig(
+                              nextProvider,
+                              claudeStatusQuery.data?.providers[nextProvider],
+                            );
+                          claudeProviderDraftsRef.current[nextProvider] =
+                            normalizeClaudeDraftValues(
+                              nextValues,
+                              nextProvider,
+                            );
+                          claudeForm.setFieldsValue(
+                            claudeProviderDraftsRef.current[nextProvider],
+                          );
+                          previousCustomModelIdsSignatureRef.current =
+                            getCustomModelIdsSignatureFromClaudeValues(
+                              claudeProviderDraftsRef.current[nextProvider],
+                            );
                         }}
                         destroyInactiveTabPane={false}
                         animated={false}
@@ -1750,7 +1925,33 @@ export const SettingsPage = () => {
                                             size="small"
                                             type="text"
                                             danger
-                                            onClick={() => remove(field.name)}
+                                            onClick={() => {
+                                              const currentCustomModels =
+                                                normalizeCustomModelFormValues(
+                                                  ((claudeForm.getFieldValue(
+                                                    "customModels",
+                                                  ) as CustomModelFormValue[] | undefined) ??
+                                                    []),
+                                                );
+                                              const removedModelId =
+                                                currentCustomModels[field.name]?.id;
+                                              remove(field.name);
+                                              if (!removedModelId) {
+                                                return;
+                                              }
+                                              const currentEnabledModels =
+                                                ((claudeForm.getFieldValue(
+                                                  "enabledModels",
+                                                ) as string[] | undefined) ?? []);
+                                              const nextEnabledModels =
+                                                currentEnabledModels.filter(
+                                                  (modelId) =>
+                                                    modelId !== removedModelId,
+                                                );
+                                              claudeForm.setFieldsValue({
+                                                enabledModels: nextEnabledModels,
+                                              });
+                                            }}
                                           >
                                             {t("删除")}
                                           </Button>
@@ -1831,9 +2032,9 @@ export const SettingsPage = () => {
                                     ))}
                                     <Button
                                       type="dashed"
-                                      onClick={() =>
-                                        add(DEFAULT_CUSTOM_MODEL_FORM_VALUE())
-                                      }
+                                      onClick={() => {
+                                        add(DEFAULT_CUSTOM_MODEL_FORM_VALUE());
+                                      }}
                                     >
                                       {t("新增自定义模型")}
                                     </Button>
@@ -1876,11 +2077,11 @@ export const SettingsPage = () => {
                         >
                           <ModelSwitchGrid
                             search={agentModelSearch}
-                            items={(availableModelsQuery.data ?? []).map(
+                            items={availableAgentModels.map(
                               (m) => ({
                                 id: m.id,
                                 title: m.name,
-                                description: `${m.id} · ctx ${Math.round(m.contextWindow / 1024)}k · max ${Math.round(m.maxTokens / 1024)}k${m.reasoning ? " · reasoning" : ""}${m.source === "custom" ? ` · ${t("自定义")}` : ""}`,
+                                description: `${m.id} · ctx ${Math.round(m.contextWindow / 1024)}k · max ${Math.round(m.maxTokens / 1024)}k${m.reasoning ? " · reasoning" : ""}${Array.isArray(m.input) && m.input.includes("image") ? ` · ${t("支持图片输入")}` : ""}${m.source === "custom" ? ` · ${t("自定义")}` : ""}`,
                               }),
                             )}
                             empty={

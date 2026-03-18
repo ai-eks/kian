@@ -629,13 +629,14 @@ const normalizeProviderEntries = (input: unknown): ProviderEntry[] => {
 const toAgentModelDto = (
   model: Pick<
     Model<Api>,
-    "id" | "name" | "reasoning" | "contextWindow" | "maxTokens"
+    "id" | "name" | "reasoning" | "input" | "contextWindow" | "maxTokens"
   >,
   source: AgentModelDTO["source"],
 ): AgentModelDTO => ({
   id: model.id,
   name: model.name,
   reasoning: model.reasoning,
+  input: model.input,
   contextWindow: model.contextWindow,
   maxTokens: model.maxTokens,
   source,
@@ -652,6 +653,7 @@ const getConfiguredModelsForProvider = (
           id: model.id,
           name: model.name ?? model.id,
           reasoning: model.reasoning,
+          input: model.input,
           contextWindow: model.contextWindow,
           maxTokens: model.maxTokens,
         },
