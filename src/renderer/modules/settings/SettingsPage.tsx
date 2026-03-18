@@ -1586,7 +1586,7 @@ export const SettingsPage = () => {
                         label="数据存放目录"
                         extra="修改后需要重启应用才能生效。默认：~/KianWorkspace"
                         rules={[
-                          { required: true, message: "数据存放目录不能为空" },
+                          { required: true, message: t("数据存放目录不能为空") },
                         ]}
                       >
                         <Input placeholder="~/KianWorkspace" />
@@ -1816,7 +1816,7 @@ export const SettingsPage = () => {
                                     }
                                     return Promise.reject(
                                       new Error(
-                                        "URL 必须是合法的 http/https 地址",
+                                        t("URL 必须是合法的 http/https 地址"),
                                       ),
                                     );
                                   },
@@ -1852,7 +1852,7 @@ export const SettingsPage = () => {
                                     }
                                     return Promise.reject(
                                       new Error(
-                                        "配置自定义模型时必须选择 API 类型",
+                                        t("配置自定义模型时必须选择 API 类型"),
                                       ),
                                     );
                                   },
@@ -1894,16 +1894,16 @@ export const SettingsPage = () => {
                                   !isCustomApiProvider &&
                                   !String(value ?? "").trim()
                                 ) {
-                                  return Promise.reject(
-                                    new Error(
-                                      "启用 Provider 时必须设置 API Key",
-                                    ),
-                                  );
+                                    return Promise.reject(
+                                      new Error(
+                                        t("启用 Provider 时必须设置 API Key"),
+                                      ),
+                                    );
                                 }
                                 const trimmed = String(value ?? "").trim();
                                 if (trimmed && trimmed.length < 10) {
                                   return Promise.reject(
-                                    new Error("凭证长度至少 10 位"),
+                                    new Error(t("凭证长度至少 10 位")),
                                   );
                                 }
                                 return Promise.resolve();
@@ -1990,7 +1990,7 @@ export const SettingsPage = () => {
                                             rules={[
                                               {
                                                 required: true,
-                                                message: "Model ID 不能为空",
+                                                message: t("Model ID 不能为空"),
                                               },
                                             ]}
                                           >
@@ -2010,7 +2010,7 @@ export const SettingsPage = () => {
                                             rules={[
                                               {
                                                 required: true,
-                                                message: "上下文窗口不能为空",
+                                                message: t("上下文窗口不能为空"),
                                               },
                                             ]}
                                           >
@@ -2023,7 +2023,7 @@ export const SettingsPage = () => {
                                             rules={[
                                               {
                                                 required: true,
-                                                message: "最大输出 Token 不能为空",
+                                                message: t("最大输出 Token 不能为空"),
                                               },
                                             ]}
                                           >
@@ -2149,7 +2149,7 @@ export const SettingsPage = () => {
                               if (String(value).length >= 10)
                                 return Promise.resolve();
                               return Promise.reject(
-                                new Error("凭证长度至少 10 位"),
+                                new Error(t("凭证长度至少 10 位")),
                               );
                             },
                           },
@@ -2190,7 +2190,7 @@ export const SettingsPage = () => {
                               if (Array.isArray(value) && value.length > 0)
                                 return Promise.resolve();
                               return Promise.reject(
-                                new Error("请至少启用一个模型"),
+                                new Error(t("请至少启用一个模型")),
                               );
                             },
                           },
@@ -2271,14 +2271,16 @@ export const SettingsPage = () => {
                                               return Promise.resolve();
                                             return Promise.reject(
                                               new Error(
-                                                "启用 Telegram 前请先输入 Bot Token",
+                                                t(
+                                                  "启用 Telegram 前请先输入 Bot Token",
+                                                ),
                                               ),
                                             );
                                           }
                                           if (String(value).length >= 10)
                                             return Promise.resolve();
                                           return Promise.reject(
-                                            new Error("凭证长度至少 10 位"),
+                                            new Error(t("凭证长度至少 10 位")),
                                           );
                                         },
                                       },
@@ -2308,7 +2310,9 @@ export const SettingsPage = () => {
                                           if (tokens.length === 0)
                                             return Promise.reject(
                                               new Error(
-                                                "启用 Telegram 前请先填写 user_id",
+                                                t(
+                                                  "启用 Telegram 前请先填写 user_id",
+                                                ),
                                               ),
                                             );
                                           if (
@@ -2317,7 +2321,7 @@ export const SettingsPage = () => {
                                             )
                                           ) {
                                             return Promise.reject(
-                                              new Error("user_id 必须为纯数字"),
+                                              new Error(t("user_id 必须为纯数字")),
                                             );
                                           }
                                           return Promise.resolve();
@@ -2397,14 +2401,16 @@ export const SettingsPage = () => {
                                               return Promise.resolve();
                                             return Promise.reject(
                                               new Error(
-                                                "启用 Discord 前请先输入 Bot Token",
+                                                t(
+                                                  "启用 Discord 前请先输入 Bot Token",
+                                                ),
                                               ),
                                             );
                                           }
                                           if (String(value).length >= 10)
                                             return Promise.resolve();
                                           return Promise.reject(
-                                            new Error("凭证长度至少 10 位"),
+                                            new Error(t("凭证长度至少 10 位")),
                                           );
                                         },
                                       },
@@ -2433,7 +2439,9 @@ export const SettingsPage = () => {
                                           if (tokens.length === 0)
                                             return Promise.reject(
                                               new Error(
-                                                "启用 Discord 前请先填写允许服务器 ID",
+                                                t(
+                                                  "启用 Discord 前请先填写允许服务器 ID",
+                                                ),
                                               ),
                                             );
                                           if (
@@ -2443,7 +2451,7 @@ export const SettingsPage = () => {
                                           ) {
                                             return Promise.reject(
                                               new Error(
-                                                "服务器 ID 必须为纯数字",
+                                                t("服务器 ID 必须为纯数字"),
                                               ),
                                             );
                                           }
@@ -2480,7 +2488,9 @@ export const SettingsPage = () => {
                                           if (tokens.length === 0)
                                             return Promise.reject(
                                               new Error(
-                                                "启用 Discord 前请先填写允许频道 ID",
+                                                t(
+                                                  "启用 Discord 前请先填写允许频道 ID",
+                                                ),
                                               ),
                                             );
                                           if (
@@ -2489,7 +2499,7 @@ export const SettingsPage = () => {
                                             )
                                           ) {
                                             return Promise.reject(
-                                              new Error("频道 ID 必须为纯数字"),
+                                              new Error(t("频道 ID 必须为纯数字")),
                                             );
                                           }
                                           return Promise.resolve();
@@ -2570,7 +2580,7 @@ export const SettingsPage = () => {
                                               return Promise.resolve();
                                             return Promise.reject(
                                               new Error(
-                                                "启用飞书前请先输入 AppID",
+                                                t("启用飞书前请先输入 AppID"),
                                               ),
                                             );
                                           }
@@ -2599,7 +2609,7 @@ export const SettingsPage = () => {
                                               return Promise.resolve();
                                             return Promise.reject(
                                               new Error(
-                                                "启用飞书前请先输入 AppSecret",
+                                                t("启用飞书前请先输入 AppSecret"),
                                               ),
                                             );
                                           }

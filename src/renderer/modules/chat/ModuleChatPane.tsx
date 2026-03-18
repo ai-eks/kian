@@ -288,8 +288,6 @@ const formatProviderLabel = (provider: string): string => {
       return "OpenAI";
     case "custom-api":
       return "Custom API";
-    case "openai-compatible":
-      return "Custom API";
     case "openrouter":
       return "OpenRouter";
     case "xai":
@@ -1904,7 +1902,7 @@ export const ModuleChatPane = ({
       if (!streamState?.activeRequestId) {
         clearSessionStream(variables.sessionId);
       }
-      message.error(error instanceof Error ? error.message : "发送失败");
+      message.error(error instanceof Error ? error.message : t("发送失败"));
     },
   });
 
@@ -1922,7 +1920,7 @@ export const ModuleChatPane = ({
         requestId,
       }),
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : "打断失败");
+      message.error(error instanceof Error ? error.message : t("打断失败"));
     },
   });
 
@@ -2240,7 +2238,7 @@ export const ModuleChatPane = ({
       const legacyPath = (rawFile as File & { path?: string }).path;
       const sourcePath = api.file.getPathForFile(rawFile) || legacyPath;
       if (!sourcePath) {
-        message.error("当前环境无法读取文件路径");
+        message.error(t("当前环境无法读取文件路径"));
         continue;
       }
 
