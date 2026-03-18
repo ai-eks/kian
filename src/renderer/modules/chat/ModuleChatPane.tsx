@@ -13,6 +13,7 @@ import {
 } from "@renderer/modules/chat/ChatComposer";
 import { MarkdownPreBlock } from "@renderer/components/MarkdownPreBlock";
 import { ScrollArea } from "@renderer/components/ScrollArea";
+import { RevealableImage } from "@renderer/components/RevealableImage";
 import { useAppI18n } from "@renderer/i18n/AppI18nProvider";
 import { translateUiText } from "@renderer/i18n/uiTranslations";
 import { api } from "@renderer/lib/api";
@@ -36,13 +37,18 @@ import {
   buildUserRequestMetadataJson,
   hasPersistedPendingUserMessage,
 } from "@shared/utils/chatPendingMessage";
+import {
+  detectMarkdownMediaKindFromSource,
+  rewriteBareRemoteMediaUrlsInMarkdown,
+  type MarkdownMediaKind,
+} from "@shared/utils/markdownMedia";
 import { DEFAULT_SHORTCUT_CONFIG } from "@shared/utils/shortcuts";
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { message } from "antd";
+import { Tag, message } from "antd";
 import {
   ChangeEvent,
   isValidElement,
@@ -106,6 +112,12 @@ type MessageBlock =
       message: ChatMessageDTO;
     }
   | {
+      type: "streaming-thinking";
+      key: string;
+      createdAt: string;
+      content: string;
+    }
+  | {
       type: "streaming-assistant";
       key: string;
       createdAt: string;
@@ -125,6 +137,13 @@ type TimelineItem =
       createdAt: string;
       sortOrder: number;
       message: ChatMessageDTO;
+    }
+  | {
+      type: "streaming-thinking";
+      key: string;
+      createdAt: string;
+      sortOrder: number;
+      content: string;
     }
   | {
       type: "streaming-assistant";
@@ -248,7 +267,6 @@ const TEXT_PREVIEW_MAX_CHARS = 6_000;
 const TEXT_PREVIEW_MAX_LINES = 80;
 const LEGACY_CHAT_INPUT_SHORTCUT_TIP_DISMISSED_STORAGE_KEY =
   "kian.chat.input-shortcut-tip.dismissed";
-type MarkdownMediaKind = "image" | "video" | "audio";
 type ExtendedMarkdownKind = MarkdownMediaKind | "file" | "attachment";
 
 const isChatThinkingLevel = (value: string): value is ChatThinkingLevel =>
@@ -429,7 +447,10 @@ const normalizeFencedCodeBlocks = (content: string): string =>
   );
 
 const preprocessExtendedMediaMarkdown = (content: string): string =>
-  normalizeFencedCodeBlocks(repairCorruptedRelativeMediaPaths(content)).replace(
+  rewriteBareRemoteMediaUrlsInMarkdown(
+    normalizeFencedCodeBlocks(repairCorruptedRelativeMediaPaths(content)),
+    (kind, url) => buildExtendedMarkdown(kind, url),
+  ).replace(
     EXTENDED_MEDIA_PATTERN,
     (_full, kindRaw: string, sizeRaw: string | undefined, pathRaw: string) => {
       const kind = kindRaw.toLowerCase() as ExtendedMarkdownKind;
@@ -471,6 +492,24 @@ const resolveRenderableUrl = (url: string, projectId?: string): string => {
     return toLocalMediaUrl(normalized, projectId);
   }
   return normalized;
+};
+
+const resolveRevealableImagePath = (url: string): string | null => {
+  const normalized = url.trim();
+  if (!normalized) return null;
+  if (UNSAFE_URL_PATTERN.test(normalized.toLowerCase())) return null;
+  if (/^(?:https?|file|data|blob|mailto|tel|kian-local):/i.test(normalized)) {
+    return null;
+  }
+  const hashIndex = normalized.indexOf("#");
+  const queryIndex = normalized.indexOf("?");
+  const suffixIndex =
+    hashIndex < 0
+      ? queryIndex
+      : queryIndex < 0
+        ? hashIndex
+        : Math.min(hashIndex, queryIndex);
+  return suffixIndex < 0 ? normalized : normalized.slice(0, suffixIndex);
 };
 
 const parseSizeFromAlt = (
@@ -698,10 +737,12 @@ const MarkdownMessage = memo(
     content,
     projectId,
     user,
+    className,
   }: {
     content: string;
     projectId?: string;
     user: boolean;
+    className?: string;
   }) => {
     const normalizedContent = useMemo(
       () => preprocessExtendedMediaMarkdown(content),
@@ -710,7 +751,7 @@ const MarkdownMessage = memo(
 
     return (
       <div
-        className={`markdown-body chat-markdown ${user ? "chat-markdown--user" : "chat-markdown--assistant"}`}
+        className={`markdown-body chat-markdown ${user ? "chat-markdown--user" : "chat-markdown--assistant"} ${className ?? ""}`}
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
@@ -792,12 +833,12 @@ const MarkdownMessage = memo(
                 String(alt ?? ""),
               );
               const altKind = cleanAlt.trim().toLowerCase();
+              const rawSourcePath = extended?.sourcePath ?? source;
               const mediaKind =
                 extended?.kind ??
                 (altKind === "video" || altKind === "audio"
                   ? altKind
-                  : "image");
-              const rawSourcePath = extended?.sourcePath ?? source;
+                  : (detectMarkdownMediaKindFromSource(rawSourcePath) ?? "image"));
               const resolvedSource = resolveRenderableUrl(
                 rawSourcePath,
                 projectId,
@@ -831,12 +872,14 @@ const MarkdownMessage = memo(
                   ? cleanAlt
                   : "image";
               return (
-                <img
+                <RevealableImage
                   src={resolvedSource}
                   alt={normalizedAlt}
+                  filePath={resolveRevealableImagePath(rawSourcePath)}
+                  projectId={projectId}
                   className="chat-markdown__media chat-markdown__media--image"
+                  imageClassName="chat-markdown__media-image"
                   style={mediaSizeStyle(width, height)}
-                  loading="lazy"
                 />
               );
             },
@@ -983,7 +1026,8 @@ const parseMessageMetadataJson = (
     if (
       parsed.kind === "delegation" ||
       parsed.kind === "sub_agent_report" ||
-      parsed.kind === "delegation_receipt"
+      parsed.kind === "delegation_receipt" ||
+      parsed.kind === "thinking"
     ) {
       return parsed;
     }
@@ -1064,6 +1108,13 @@ const getSubAgentReportSummary = (content: string): string => {
   return `${summary.slice(0, 109).trimEnd()}…`;
 };
 
+const formatThinkingQuoteMarkdown = (content: string): string =>
+  content
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n");
+
 const SubAgentReportCard = memo(
   ({
     content,
@@ -1132,6 +1183,42 @@ const SubAgentReportCard = memo(
   },
 );
 SubAgentReportCard.displayName = "SubAgentReportCard";
+
+const ThinkingMessageCard = memo(
+  ({
+    content,
+    projectId,
+    title,
+    active = false,
+  }: {
+    content: string;
+    projectId?: string;
+    title: string;
+    active?: boolean;
+  }) => (
+    <details className="group w-full">
+      <summary className="list-none [&::-webkit-details-marker]:hidden">
+        <Tag
+          key={`${active ? "active" : "idle"}-${title}`}
+          className="i18n-no-translate !m-0 inline-flex cursor-pointer items-center gap-1 rounded-full border-[#e5d7ae] bg-[#fff7df] px-2 py-0.5 text-[11px] font-medium text-[#8a6b17]"
+        >
+          {active ? <LoadingOutlined className="text-[10px]" spin /> : null}
+          <span>{title}</span>
+          <ArrowUpOutlined className="text-[10px] transition-transform group-open:rotate-0 rotate-180" />
+        </Tag>
+      </summary>
+      <div className="pt-2">
+        <MarkdownMessage
+          content={formatThinkingQuoteMarkdown(content)}
+          projectId={projectId}
+          user={false}
+          className="[&_blockquote]:my-0 [&_blockquote]:border-l-[3px] [&_blockquote]:border-[#e5d7ae] [&_blockquote]:bg-[#fffcf4] [&_blockquote]:py-1 [&_blockquote]:pl-3 [&_blockquote]:pr-0 [&_blockquote]:text-slate-500 [&_blockquote_p]:text-[12px] [&_blockquote_p]:italic [&_blockquote_p]:leading-5"
+        />
+      </div>
+    </details>
+  ),
+);
+ThinkingMessageCard.displayName = "ThinkingMessageCard";
 
 const parseToolCallJson = (
   toolCallJson: string | null | undefined,
@@ -1212,39 +1299,23 @@ interface ChatTimelineProps {
   projectId?: string;
   timelineBlocks: MessageBlock[];
   showStreamingPanel: boolean;
+  showWorkingIndicator: boolean;
+  streamingThinkingActive: boolean;
   streamError?: string;
   messageBottomRef: RefObject<HTMLDivElement | null>;
+  thinkingMessageTitle: string;
+  streamingThinkingTitle: string;
+  workingIndicatorLabel: string;
+  delegationReceiptLabel: string;
+  delegationLabel: string;
 }
 
-const ThinkingDots = () => {
-  const delays: CSSProperties[] = [
-    { animationDelay: "0ms" },
-    { animationDelay: "160ms" },
-    { animationDelay: "320ms" },
-  ];
-  return (
-    <span className="inline-flex items-center gap-1">
-      {delays.map((style, index) => (
-        <span
-          key={index}
-          className="h-1.5 w-1.5 rounded-full bg-[#7d9ff2] animate-pulse"
-          style={style}
-        />
-      ))}
-    </span>
-  );
-};
-
-const ThinkingIndicator = memo(() => (
+const ThinkingIndicator = memo(({ label }: { label: string }) => (
   <div className="flex justify-start">
-    <div className="inline-flex items-center gap-2 rounded-xl border border-[#dbe5f5] bg-[#f8fbff] px-2.5 py-1.5">
-      <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#eaf1ff] text-[#2f6ff7]">
-        <LoadingOutlined className="text-[10px]" spin />
-      </span>
-      <span className="text-[12px] font-medium text-slate-600">
-        正在努力工作中
-      </span>
-    </div>
+    <Tag className="i18n-no-translate !m-0 inline-flex items-center gap-1 rounded-full border-[#dbe5f5] bg-[#f8fbff] px-2 py-0.5 text-[11px] font-medium text-[#2f6ff7]">
+      <LoadingOutlined className="text-[10px]" spin />
+      <span>{label}</span>
+    </Tag>
   </div>
 ));
 ThinkingIndicator.displayName = "ThinkingIndicator";
@@ -1254,14 +1325,22 @@ const ChatTimeline = memo(
     projectId,
     timelineBlocks,
     showStreamingPanel,
+    showWorkingIndicator,
+    streamingThinkingActive,
     streamError,
     messageBottomRef,
+    thinkingMessageTitle,
+    streamingThinkingTitle,
+    workingIndicatorLabel,
+    delegationReceiptLabel,
+    delegationLabel,
   }: ChatTimelineProps) => {
     if (timelineBlocks.length === 0 && !showStreamingPanel) {
       return null;
     }
 
-    const shouldShowThinkingIndicator = showStreamingPanel;
+    const shouldShowWorkingIndicator = showWorkingIndicator;
+    const shouldShowStreamingThinkingState = streamingThinkingActive;
 
     return (
       <div className="flex flex-col gap-3">
@@ -1279,6 +1358,26 @@ const ChatTimeline = memo(
                     ))}
                   </div>
                 </div>
+              </div>
+            );
+          }
+
+          if (block.type === "streaming-thinking") {
+            if (!block.content.trim()) {
+              return null;
+            }
+            return (
+              <div key={block.key} className="w-full">
+                <ThinkingMessageCard
+                  content={block.content}
+                  projectId={projectId}
+                  title={
+                    shouldShowStreamingThinkingState
+                      ? streamingThinkingTitle
+                      : thinkingMessageTitle
+                  }
+                  active={shouldShowStreamingThinkingState}
+                />
               </div>
             );
           }
@@ -1311,6 +1410,7 @@ const ChatTimeline = memo(
             messageMetadata?.kind === "delegation" ||
             messageMetadata?.kind === "delegation_receipt";
           const isReportCard = messageMetadata?.kind === "sub_agent_report";
+          const isThinkingCard = messageMetadata?.kind === "thinking";
           return (
             <div
               key={item.id}
@@ -1322,6 +1422,8 @@ const ChatTimeline = memo(
                     ? "max-w-[88%] rounded-2xl rounded-br-md bg-[#2f6ff7] px-3 py-2 text-white"
                     : isDelegationCard
                       ? "w-full rounded-2xl border border-[#d9ece2] bg-[#f3fbf7] px-3 py-3 text-slate-800"
+                      : isThinkingCard
+                        ? "w-full"
                       : isReportCard
                         ? "w-full"
                         : "w-full text-slate-800"
@@ -1330,8 +1432,8 @@ const ChatTimeline = memo(
                 {isDelegationCard ? (
                   <div className="mb-2 inline-flex rounded-full border border-[#c5e4d2] bg-white px-2 py-0.5 text-[11px] font-medium text-[#2b6b4b]">
                     {messageMetadata?.kind === "delegation_receipt"
-                      ? "主 Agent 委派回执"
-                      : "来自主 Agent 的委派"}
+                      ? delegationReceiptLabel
+                      : delegationLabel}
                   </div>
                 ) : null}
                 {isReportCard ? (
@@ -1339,6 +1441,12 @@ const ChatTimeline = memo(
                     content={item.content}
                     metadata={messageMetadata}
                     projectId={projectId}
+                  />
+                ) : isThinkingCard ? (
+                  <ThinkingMessageCard
+                    content={displayContent}
+                    projectId={projectId}
+                    title={thinkingMessageTitle}
                   />
                 ) : (
                   <MarkdownMessage
@@ -1358,11 +1466,11 @@ const ChatTimeline = memo(
         <div
           ref={messageBottomRef}
           aria-hidden="true"
-          className={`relative w-full ${shouldShowThinkingIndicator ? "py-2" : "h-px"}`}
+          className={`relative w-full ${shouldShowWorkingIndicator ? "py-2" : "h-px"}`}
         >
-          {shouldShowThinkingIndicator ? (
+          {shouldShowWorkingIndicator ? (
             <div className="pointer-events-none w-full">
-              <ThinkingIndicator />
+              <ThinkingIndicator label={workingIndicatorLabel} />
             </div>
           ) : null}
         </div>
@@ -1463,6 +1571,7 @@ export const ModuleChatPane = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingFilesRef = useRef<LocalChatFile[]>([]);
   const hasHydratedThinkingLevelRef = useRef(false);
+  const initializedScopeKeyRef = useRef<string | null>(null);
 
   const streamSession = useChatStreamStore((state) =>
     currentSessionId ? state.sessions[currentSessionId] : undefined,
@@ -1476,6 +1585,8 @@ export const ModuleChatPane = ({
   );
   const streamingBlocks = streamSession?.streamingBlocks ?? [];
   const streamingInProgress = streamSession?.streamingInProgress ?? false;
+  const streamingThinkingActive =
+    streamSession?.streamingThinkingActive ?? false;
   const streamError = streamSession?.streamError;
   const activeRequestId = streamSession?.activeRequestId;
 
@@ -1489,8 +1600,8 @@ export const ModuleChatPane = ({
     queryFn: api.settings.getShortcutConfig,
   });
   const claudeStatusQuery = useQuery({
-    queryKey: ["settings", "claude"],
-    queryFn: api.settings.get,
+    queryKey: ["settings", "claude", scopeKey],
+    queryFn: () => api.settings.get(effectiveScope),
   });
   const legacyInputShortcutTipDismissed = useMemo(() => {
     if (typeof window === "undefined") {
@@ -1594,9 +1705,19 @@ export const ModuleChatPane = ({
 
   // Reset state when project changes
   useEffect(() => {
+    if (initializedScopeKeyRef.current === null) {
+      initializedScopeKeyRef.current = scopeKey;
+      return;
+    }
+    if (initializedScopeKeyRef.current === scopeKey) {
+      return;
+    }
+    initializedScopeKeyRef.current = scopeKey;
     setInternalSessionId(undefined);
     setInput("");
     setIsComposing(false);
+    setSelectedModel(undefined);
+    setSelectedThinkingLevel("low");
     setPendingUserMessages([]);
     setQueuedSendPayloads([]);
     setIsCreatingSession(false);
@@ -1607,6 +1728,7 @@ export const ModuleChatPane = ({
     hasInitialBottomPositionedRef.current = false;
     forceScrollToBottomRef.current = false;
     isBottomAnchorVisibleRef.current = true;
+    hasHydratedThinkingLevelRef.current = false;
   }, [scopeKey]);
 
   useEffect(() => {
@@ -1874,6 +1996,17 @@ export const ModuleChatPane = ({
         continue;
       }
 
+      if (block.kind === "thinking") {
+        timelineItems.push({
+          type: "streaming-thinking",
+          key: block.key,
+          createdAt: block.createdAt,
+          sortOrder,
+          content: block.content,
+        });
+        continue;
+      }
+
       timelineItems.push({
         type: "tool",
         key: block.key,
@@ -1920,6 +2053,16 @@ export const ModuleChatPane = ({
           key: item.key,
           createdAt: item.createdAt,
           message: item.message,
+        });
+        continue;
+      }
+
+      if (item.type === "streaming-thinking") {
+        blocks.push({
+          type: "streaming-thinking",
+          key: item.key,
+          createdAt: item.createdAt,
+          content: item.content,
         });
         continue;
       }
@@ -2222,6 +2365,30 @@ export const ModuleChatPane = ({
         return;
       }
 
+      try {
+        const latestSessions = await api.chat.getSessions(effectiveScope);
+        const matchedSession = latestSessions.find(
+          (session) => session.id === sessionId,
+        );
+        if (!matchedSession) {
+          const fallbackSession =
+            latestSessions[0] ??
+            (await api.chat.createSession({
+              scope: effectiveScope,
+              module,
+              title: "",
+            }));
+          sessionId = fallbackSession.id;
+          setCurrentSessionId(fallbackSession.id);
+          void queryClient.invalidateQueries({
+            queryKey: ["chat-sessions", scopeKey],
+          });
+        }
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : t("发送失败"));
+        return;
+      }
+
       const requestId =
         globalThis.crypto?.randomUUID?.() ?? `req_${Date.now()}`;
       setInput("");
@@ -2366,13 +2533,18 @@ export const ModuleChatPane = ({
     !isCreatingSession;
   const canInterrupt =
     Boolean(currentSessionId) &&
-    (sendMutation.isPending ||
+    ((sendMutation.isPending &&
+      sendMutation.variables?.sessionId === currentSessionId) ||
       streamingInProgress ||
       Boolean(activeRequestId) ||
       queuedSendPayloads.length > 0) &&
     !interruptMutation.isPending;
   const showStreamingPanel =
-    sendMutation.isPending || streamingInProgress || hasPendingAssistantReply;
+    (sendMutation.isPending &&
+      sendMutation.variables?.sessionId === currentSessionId) ||
+    streamingInProgress ||
+    hasPendingAssistantReply;
+  const showWorkingIndicator = showStreamingPanel && !streamingThinkingActive;
   const isAutoLayout = layoutMode === "auto";
   const rootClassName = isAutoLayout
     ? "flex min-h-0 justify-center"
@@ -2448,12 +2620,42 @@ export const ModuleChatPane = ({
       }))}
       onModelChange={(value) => {
         setSelectedModel(value);
-        api.settings.setLastSelectedModel(value).catch(() => {});
+        queryClient.setQueryData(
+          ["settings", "claude", scopeKey],
+          (
+            previous:
+              | Awaited<ReturnType<typeof api.settings.get>>
+              | undefined,
+          ) =>
+            previous
+              ? {
+                  ...previous,
+                  lastSelectedModel: value,
+                }
+              : previous,
+        );
+        api.settings.setLastSelectedModel(effectiveScope, value).catch(() => {});
       }}
       selectedThinkingLevel={selectedThinkingLevel}
       onThinkingLevelChange={(value) => {
         setSelectedThinkingLevel(value);
-        api.settings.setLastSelectedThinkingLevel(value).catch(() => {});
+        queryClient.setQueryData(
+          ["settings", "claude", scopeKey],
+          (
+            previous:
+              | Awaited<ReturnType<typeof api.settings.get>>
+              | undefined,
+          ) =>
+            previous
+              ? {
+                  ...previous,
+                  lastSelectedThinkingLevel: value,
+                }
+              : previous,
+        );
+        api.settings
+          .setLastSelectedThinkingLevel(effectiveScope, value)
+          .catch(() => {});
       }}
       thinkingLevelOptions={thinkingLevelOptions}
       thinkingLevelMenuHeader={t("思考等级")}
@@ -2566,8 +2768,15 @@ export const ModuleChatPane = ({
               projectId={mediaProjectId}
               timelineBlocks={timelineBlocks}
               showStreamingPanel={showStreamingPanel}
+              showWorkingIndicator={showWorkingIndicator}
+              streamingThinkingActive={streamingThinkingActive}
               streamError={streamError}
               messageBottomRef={messageBottomRef}
+              thinkingMessageTitle={t("思考过程")}
+              streamingThinkingTitle={t("正在思考中...")}
+              workingIndicatorLabel={t("努力工作中")}
+              delegationReceiptLabel={t("主 Agent 委派回执")}
+              delegationLabel={t("来自主 Agent 的委派")}
             />
           </ScrollArea>
         ) : null}

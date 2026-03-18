@@ -620,7 +620,7 @@ export const MainLayout = () => {
                             key: item.id,
                             label: (
                               <div className="flex items-center justify-between gap-3">
-                                <span className="max-w-[340px] truncate">{item.name}</span>
+                                <span className="i18n-no-translate max-w-[340px] truncate">{item.name}</span>
                                 {item.id === project?.id ? (
                                   <CheckOutlined className="shrink-0 text-[#2f6ff7]" />
                                 ) : null}
@@ -634,7 +634,7 @@ export const MainLayout = () => {
                       >
                         <button
                           type="button"
-                          className="no-drag flex max-w-[min(640px,60vw)] items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-[#eef3fc]"
+                          className="i18n-no-translate no-drag flex max-w-[min(640px,60vw)] items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-[#eef3fc]"
                           onDoubleClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();

@@ -26,6 +26,39 @@ describe("getAboutUpdatePresentation", () => {
     expect(presentation.progressPercent).toBe(0);
   });
 
+  it("keeps idle state as not checked even if stale version fields exist", () => {
+    const presentation = getAboutUpdatePresentation(
+      createStatus({
+        stage: "idle",
+        currentVersion: "0.1.1",
+        latestVersion: "0.1.2",
+      }),
+    );
+
+    expect(presentation.label).toBe("未检查更新");
+    expect(presentation.isUpdateInFlight).toBe(false);
+    expect(presentation.showLatestVersion).toBe(false);
+    expect(presentation.showProgress).toBe(false);
+  });
+
+  it("shows verifying state only when the main process explicitly reports verifying", () => {
+    const presentation = getAboutUpdatePresentation(
+      createStatus({
+        stage: "verifying",
+        currentVersion: "0.1.1",
+        latestVersion: "0.1.2",
+        progressPercent: 100,
+        message: "正在校验更新包签名…",
+      }),
+    );
+
+    expect(presentation.label).toBe("正在校验更新包");
+    expect(presentation.isUpdateInFlight).toBe(true);
+    expect(presentation.showLatestVersion).toBe(true);
+    expect(presentation.showProgress).toBe(true);
+    expect(presentation.progressPercent).toBe(100);
+  });
+
   it("shows a full progress state after the update package is downloaded", () => {
     const presentation = getAboutUpdatePresentation(
       createStatus({
@@ -36,6 +69,7 @@ describe("getAboutUpdatePresentation", () => {
     );
 
     expect(presentation.canInstallUpdate).toBe(true);
+    expect(presentation.label).toBe("更新已下载，可安装");
     expect(presentation.showProgress).toBe(true);
     expect(presentation.showLatestVersion).toBe(true);
     expect(presentation.progressPercent).toBe(100);

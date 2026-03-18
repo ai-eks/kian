@@ -126,6 +126,8 @@ interface SettingsFile {
   mediaProviders: ProviderEntry[];
   lastSelectedModel?: string;
   lastSelectedThinkingLevel?: ChatThinkingLevel;
+  lastSelectedModelByScope: Record<string, string>;
+  lastSelectedThinkingLevelByScope: Record<string, ChatThinkingLevel>;
   shortcuts: ShortcutConfigDTO;
   mcpServers: McpServerSettings[];
   chatChannels: {
@@ -143,6 +145,8 @@ interface LegacySettingsFile {
   defaultProvider?: unknown;
   defaultModel?: unknown;
   lastSelectedThinkingLevel?: unknown;
+  lastSelectedModelByScope?: unknown;
+  lastSelectedThinkingLevelByScope?: unknown;
   shortcuts?: unknown;
   mcpServers?: unknown;
   chatChannels?: {
@@ -184,6 +188,12 @@ const DEFAULT_GENERAL_CONFIG_FLAGS = {
 } as const;
 
 const defaultSystemPromptCache = new Map<string, string>();
+const MAIN_SCOPE_SETTINGS_KEY = "main";
+
+const getSettingsScopeKey = (scope: ChatScope = { type: "main" }): string =>
+  scope.type === "main"
+    ? MAIN_SCOPE_SETTINGS_KEY
+    : `project:${scope.projectId}`;
 
 const readBundledPromptFile = async (fileName: string): Promise<string> => {
   const cachedPrompt = defaultSystemPromptCache.get(fileName);
@@ -281,6 +291,52 @@ const normalizeOptionalString = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : undefined;
+};
+
+const normalizeModelSelectionMap = (
+  value: unknown,
+): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).reduce<Array<[string, string]>>((acc, [key, item]) => {
+      const normalizedKey = key.trim();
+      if (!normalizedKey || typeof item !== "string") {
+        return acc;
+      }
+      const normalizedValue = item.trim();
+      if (!normalizedValue) {
+        return acc;
+      }
+      acc.push([normalizedKey, normalizedValue]);
+      return acc;
+    }, []),
+  );
+};
+
+const normalizeThinkingLevelSelectionMap = (
+  value: unknown,
+): Record<string, ChatThinkingLevel> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).reduce<Array<[string, ChatThinkingLevel]>>(
+      (acc, [key, item]) => {
+        const normalizedKey = key.trim();
+        const normalizedValue = normalizeChatThinkingLevel(item);
+        if (!normalizedKey || !normalizedValue) {
+          return acc;
+        }
+        acc.push([normalizedKey, normalizedValue]);
+        return acc;
+      },
+      [],
+    ),
+  );
 };
 
 const normalizeBoolean = (value: unknown, fallback = false): boolean => {
@@ -706,6 +762,20 @@ const normalizeSettingsFile = (
   const lastSelectedThinkingLevel = normalizeChatThinkingLevel(
     raw?.lastSelectedThinkingLevel,
   );
+  const lastSelectedModelByScope = normalizeModelSelectionMap(
+    raw?.lastSelectedModelByScope,
+  );
+  const lastSelectedThinkingLevelByScope = normalizeThinkingLevelSelectionMap(
+    raw?.lastSelectedThinkingLevelByScope,
+  );
+  if (typeof lastSelectedModel === "string" && lastSelectedModel.trim()) {
+    lastSelectedModelByScope[MAIN_SCOPE_SETTINGS_KEY] ??=
+      lastSelectedModel.trim();
+  }
+  if (lastSelectedThinkingLevel) {
+    lastSelectedThinkingLevelByScope[MAIN_SCOPE_SETTINGS_KEY] ??=
+      lastSelectedThinkingLevel;
+  }
 
   const telegramRaw = raw?.chatChannels?.telegram;
   const discordRaw = raw?.chatChannels?.discord;
@@ -746,6 +816,8 @@ const normalizeSettingsFile = (
     mediaProviders,
     lastSelectedModel: normalizedLastSelectedModel,
     lastSelectedThinkingLevel,
+    lastSelectedModelByScope,
+    lastSelectedThinkingLevelByScope,
     shortcuts: normalizeShortcutConfig(raw?.shortcuts),
     mcpServers,
     chatChannels: {
@@ -848,6 +920,10 @@ const applyLegacyWorkspaceSettings = (
   return {
     ...settings,
     lastSelectedModel: `${defaultProvider}:${defaultModel}`,
+    lastSelectedModelByScope: {
+      ...settings.lastSelectedModelByScope,
+      [MAIN_SCOPE_SETTINGS_KEY]: `${defaultProvider}:${defaultModel}`,
+    },
   };
 };
 
@@ -946,6 +1022,38 @@ const migrateLegacyWorkspaceSettings = async (
   }
   await removeLegacyWorkspaceSettingsFile();
   return nextSettings;
+};
+
+const getScopedSelectedModel = (
+  settings: SettingsFile,
+  scope: ChatScope = { type: "main" },
+): string | undefined => {
+  const scopeKey = getSettingsScopeKey(scope);
+  const scopedModel = settings.lastSelectedModelByScope[scopeKey]?.trim();
+  if (scopedModel) {
+    return scopedModel;
+  }
+  if (scope.type === "main") {
+    const legacyModel = settings.lastSelectedModel?.trim();
+    return legacyModel || undefined;
+  }
+  return undefined;
+};
+
+const getScopedThinkingLevel = (
+  settings: SettingsFile,
+  scope: ChatScope = { type: "main" },
+): ChatThinkingLevel | undefined => {
+  const scopeKey = getSettingsScopeKey(scope);
+  const scopedThinkingLevel =
+    settings.lastSelectedThinkingLevelByScope[scopeKey];
+  if (scopedThinkingLevel) {
+    return scopedThinkingLevel;
+  }
+  if (scope.type === "main") {
+    return settings.lastSelectedThinkingLevel;
+  }
+  return undefined;
 };
 
 const readSettingsFile = async (): Promise<SettingsFile> => {
@@ -1063,7 +1171,9 @@ export const settingsService = {
     });
   },
 
-  async getClaudeStatus(): Promise<ClaudeConfigStatus> {
+  async getClaudeStatus(
+    scope: ChatScope = { type: "main" },
+  ): Promise<ClaudeConfigStatus> {
     const settings = await readSettingsFile();
 
     const providers: Record<string, ProviderConfigEntry> = {};
@@ -1107,8 +1217,8 @@ export const settingsService = {
     return {
       providers,
       allEnabledModels,
-      lastSelectedModel: settings.lastSelectedModel,
-      lastSelectedThinkingLevel: settings.lastSelectedThinkingLevel,
+      lastSelectedModel: getScopedSelectedModel(settings, scope),
+      lastSelectedThinkingLevel: getScopedThinkingLevel(settings, scope),
     };
   },
 
@@ -1689,26 +1799,41 @@ export const settingsService = {
     });
   },
 
-  async setLastSelectedModel(model: string): Promise<void> {
+  async setLastSelectedModel(scope: ChatScope, model: string): Promise<void> {
     await withSettingsWriteLock(async () => {
       const settings = await readSettingsFile();
-      if (settings.lastSelectedModel === model) return;
+      const scopeKey = getSettingsScopeKey(scope);
+      const currentModel = getScopedSelectedModel(settings, scope);
+      if (currentModel === model) return;
       await writeSettingsFile({
         ...settings,
-        lastSelectedModel: model,
+        lastSelectedModel:
+          scope.type === "main" ? model : settings.lastSelectedModel,
+        lastSelectedModelByScope: {
+          ...settings.lastSelectedModelByScope,
+          [scopeKey]: model,
+        },
       });
     });
   },
 
   async setLastSelectedThinkingLevel(
+    scope: ChatScope,
     level: ChatThinkingLevel,
   ): Promise<void> {
     await withSettingsWriteLock(async () => {
       const settings = await readSettingsFile();
-      if (settings.lastSelectedThinkingLevel === level) return;
+      const scopeKey = getSettingsScopeKey(scope);
+      const currentLevel = getScopedThinkingLevel(settings, scope);
+      if (currentLevel === level) return;
       await writeSettingsFile({
         ...settings,
-        lastSelectedThinkingLevel: level,
+        lastSelectedThinkingLevel:
+          scope.type === "main" ? level : settings.lastSelectedThinkingLevel,
+        lastSelectedThinkingLevelByScope: {
+          ...settings.lastSelectedThinkingLevelByScope,
+          [scopeKey]: level,
+        },
       });
     });
   },

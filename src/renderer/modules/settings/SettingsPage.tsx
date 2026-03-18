@@ -214,7 +214,6 @@ const customModelConfigSignature = (
       ].join(":"),
     )
     .join("|");
-
 type ClaudeFormValues = {
   provider: string;
   enabled: boolean;
@@ -537,7 +536,7 @@ export const SettingsPage = () => {
   });
   const claudeStatusQuery = useQuery({
     queryKey: ["settings", "claude"],
-    queryFn: api.settings.get,
+    queryFn: () => api.settings.get({ type: "main" }),
   });
   const availableProvidersQuery = useQuery({
     queryKey: ["settings", "available-providers"],
@@ -759,11 +758,6 @@ export const SettingsPage = () => {
   }, [broadcastChannelsQuery.data]);
 
   useEffect(() => {
-    if (!updateStatusQuery.data) return;
-    setUpdateStatus(updateStatusQuery.data);
-  }, [updateStatusQuery.data]);
-
-  useEffect(() => {
     const unsubscribe = api.update.subscribeStatus((status) => {
       setUpdateStatus(status);
     });
@@ -915,9 +909,9 @@ export const SettingsPage = () => {
     feishuDirty ||
     broadcastDirty;
   const resolvedUpdateStatus = updateStatus ?? updateStatusQuery.data ?? null;
-  const updateStatusLabel = getUpdateStageLabel(resolvedUpdateStatus?.stage);
   const {
     canInstallUpdate,
+    label: updateStatusLabel,
     isUpdateChecking: isUpdateCheckingByStage,
     isUpdateInFlight,
     progressPercent: updateProgressPercent,
@@ -1230,34 +1224,34 @@ export const SettingsPage = () => {
           return;
         }
         if (status.stage === "upToDate") {
-          message.success("当前已是最新版本");
+          message.success(t("当前已是最新版本"));
           return;
         }
         if (status.stage === "downloaded") {
-          message.success("新版本已下载完成，可以安装");
+          message.success(t("新版本已下载完成，可以安装"));
           return;
         }
         if (status.stage === "downloading" || status.stage === "available") {
-          message.info("发现新版本，正在下载");
+          message.info(t("发现新版本，正在下载"));
         }
       } catch (error) {
         if (!silent) {
           message.error(
-            error instanceof Error ? error.message : "检查更新失败",
+            error instanceof Error ? error.message : t("检查更新失败"),
           );
         }
       }
     },
-    [checkUpdateMutation],
+    [checkUpdateMutation, t],
   );
 
   const handleInstallUpdate = useCallback(async () => {
     try {
       await installUpdateMutation.mutateAsync();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "安装更新失败");
+      message.error(error instanceof Error ? error.message : t("安装更新失败"));
     }
-  }, [installUpdateMutation]);
+  }, [installUpdateMutation, t]);
 
   useEffect(() => {
     if (activeSettingsTab !== "about") {
@@ -2586,18 +2580,18 @@ export const SettingsPage = () => {
             },
             {
               key: "about",
-              label: "关于",
+              label: t("关于"),
               children: (
                 <ScrollArea className="h-full">
                   <div className="px-5 pb-5">
                     <Typography.Title level={4} className="!text-slate-900">
-                      关于
+                      {t("关于")}
                     </Typography.Title>
                     <div className="rounded-xl border border-[#dbe5f5] bg-white p-4">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
                           <Typography.Text className="!text-slate-500">
-                            当前版本{" "}
+                            {t("当前版本")}{" "}
                             {resolvedUpdateStatus?.currentVersion ?? "-"}
                           </Typography.Text>
                         </div>
@@ -2608,17 +2602,20 @@ export const SettingsPage = () => {
                           loading={isUpdateChecking}
                           disabled={isUpdateInFlight}
                         >
-                          检查更新
+                          {t("检查更新")}
                         </Button>
                       </div>
 
-                      <div className="mb-2 text-sm text-slate-700">
-                        {updateStatusLabel}
-                      </div>
+                      {updateStatusLabel ? (
+                        <div className="mb-2 text-sm text-slate-700">
+                          {t(updateStatusLabel)}
+                        </div>
+                      ) : null}
 
                       {showLatestVersion ? (
                         <div className="mb-2 text-xs text-slate-500">
-                          最新版本：{resolvedUpdateStatus?.latestVersion ?? "-"}
+                          {t("最新版本：")}
+                          {resolvedUpdateStatus?.latestVersion ?? "-"}
                         </div>
                       ) : null}
 
@@ -2634,7 +2631,7 @@ export const SettingsPage = () => {
 
                       {resolvedUpdateStatus?.message ? (
                         <Typography.Paragraph className="!mb-3 !text-xs !text-slate-500">
-                          {resolvedUpdateStatus.message}
+                          {t(resolvedUpdateStatus.message)}
                         </Typography.Paragraph>
                       ) : null}
 
@@ -2647,7 +2644,7 @@ export const SettingsPage = () => {
                             }}
                             loading={installUpdateMutation.isPending}
                           >
-                            安装更新
+                            {t("安装更新")}
                           </Button>
                         </div>
                       ) : null}

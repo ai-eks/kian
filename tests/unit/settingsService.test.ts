@@ -476,4 +476,47 @@ describe("settingsService.getAgentSystemPrompt", () => {
       ]),
     );
   });
+
+  it("persists model selection separately for main and project scopes", async () => {
+    const { settingsService } = await import(
+      "../../electron/main/services/settingsService"
+    );
+
+    await settingsService.setLastSelectedModel(
+      { type: "main" },
+      "anthropic:claude-main",
+    );
+    await settingsService.setLastSelectedThinkingLevel(
+      { type: "main" },
+      "medium",
+    );
+    await settingsService.setLastSelectedModel(
+      { type: "project", projectId: "agent-alpha" },
+      "openrouter:deepseek-chat",
+    );
+    await settingsService.setLastSelectedThinkingLevel(
+      { type: "project", projectId: "agent-alpha" },
+      "high",
+    );
+
+    await expect(
+      settingsService.getClaudeStatus({ type: "main" }),
+    ).resolves.toMatchObject({
+      lastSelectedModel: "anthropic:claude-main",
+      lastSelectedThinkingLevel: "medium",
+    });
+    await expect(
+      settingsService.getClaudeStatus({
+        type: "project",
+        projectId: "agent-alpha",
+      }),
+    ).resolves.toMatchObject({
+      lastSelectedModel: "openrouter:deepseek-chat",
+      lastSelectedThinkingLevel: "high",
+    });
+
+    await expect(
+      fs.readFile(path.join(tempRoot, ".kian", "settings.json"), "utf8"),
+    ).resolves.toContain('"lastSelectedModelByScope": {');
+  });
 });

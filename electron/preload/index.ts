@@ -101,6 +101,8 @@ const api = {
       invoke<DocumentDTO>("docs:create", payload),
     createFolder: (payload: { projectId: string; path: string }) =>
       invoke<DocExplorerEntryDTO>("docs:createFolder", payload),
+    renameFile: (payload: { projectId: string; path: string; name: string }) =>
+      invoke<DocExplorerEntryDTO>("docs:renameFile", payload),
     renameFolder: (payload: { projectId: string; path: string; name: string }) =>
       invoke<DocExplorerEntryDTO>("docs:renameFolder", payload),
     deleteFolder: (payload: { projectId: string; path: string }) =>
@@ -243,10 +245,16 @@ const api = {
   file: {
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
     pickForUpload: () => invoke<ChatUploadFilePayload[]>("file:pickForUpload"),
-    showInFinder: (filePath: string, projectId?: string) =>
-      invoke<boolean>("file:showInFinder", { filePath, projectId }),
-    open: (filePath: string, projectId?: string) =>
-      invoke<boolean>("file:open", { filePath, projectId }),
+    showInFinder: (
+      filePath: string,
+      projectId?: string,
+      documentPath?: string,
+    ) => invoke<boolean>("file:showInFinder", { filePath, projectId, documentPath }),
+    open: (
+      filePath: string,
+      projectId?: string,
+      documentPath?: string,
+    ) => invoke<boolean>("file:open", { filePath, projectId, documentPath }),
   },
   clipboard: {
     writeText: (text: string) => {
@@ -255,11 +263,13 @@ const api = {
     },
   },
   settings: {
-    get: () => invoke<ClaudeConfigStatus>("settings:get"),
-    setLastSelectedModel: (model: string) =>
-      invoke<boolean>("settings:setLastSelectedModel", { model }),
-    setLastSelectedThinkingLevel: (level: "low" | "medium" | "high") =>
-      invoke<boolean>("settings:setLastSelectedThinkingLevel", { level }),
+    get: (scope: ChatScope) => invoke<ClaudeConfigStatus>("settings:get", { scope }),
+    setLastSelectedModel: (scope: ChatScope, model: string) =>
+      invoke<boolean>("settings:setLastSelectedModel", { scope, model }),
+    setLastSelectedThinkingLevel: (
+      scope: ChatScope,
+      level: "low" | "medium" | "high",
+    ) => invoke<boolean>("settings:setLastSelectedThinkingLevel", { scope, level }),
     getShortcutConfig: () =>
       invoke<ShortcutConfigDTO>("settings:getShortcutConfig"),
     saveShortcutConfig: (payload: ShortcutConfigDTO) =>

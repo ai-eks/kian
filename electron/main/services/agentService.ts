@@ -1300,25 +1300,48 @@ const createOrResumeSession = async (
   session: AgentSession;
   unsubscribe: () => void;
   modelId: string;
+  modelSource:
+    | "payload.model"
+    | "settings.lastSelectedModel"
+    | "settings.firstEnabledModel";
   thinkingLevel: ChatThinkingLevel;
 }> => {
   const storeKey = getSessionStoreKey(scope, chatSessionId);
   const scopeKey = getScopeKey(scope);
   const agentRuntimeDir = getScopeAgentRuntimeDir(scope);
-  const status = await settingsService.getClaudeStatus();
+  const status = await settingsService.getClaudeStatus(scope);
   const effectiveThinkingLevel = thinkingLevel ?? DEFAULT_CHAT_THINKING_LEVEL;
 
   // Resolve provider and model from override (format: "provider:modelId") or first enabled
   let effectiveProvider: string;
   let effectiveModelId: string;
+  let modelSource:
+    | "payload.model"
+    | "settings.lastSelectedModel"
+    | "settings.firstEnabledModel";
+  const savedScopeModel = status.lastSelectedModel?.trim();
   if (modelOverride && modelOverride.includes(":")) {
     const sepIdx = modelOverride.indexOf(":");
     effectiveProvider = modelOverride.slice(0, sepIdx);
     effectiveModelId = modelOverride.slice(sepIdx + 1);
+    modelSource = "payload.model";
+  } else if (savedScopeModel) {
+    const sepIdx = savedScopeModel.indexOf(":");
+    if (sepIdx > 0 && sepIdx < savedScopeModel.length - 1) {
+      effectiveProvider = savedScopeModel.slice(0, sepIdx);
+      effectiveModelId = savedScopeModel.slice(sepIdx + 1);
+      modelSource = "settings.lastSelectedModel";
+    } else {
+      const first = status.allEnabledModels[0];
+      effectiveProvider = first?.provider ?? "anthropic";
+      effectiveModelId = modelOverride ?? first?.modelId ?? "";
+      modelSource = "settings.firstEnabledModel";
+    }
   } else {
     const first = status.allEnabledModels[0];
     effectiveProvider = first?.provider ?? "anthropic";
     effectiveModelId = modelOverride ?? first?.modelId ?? "";
+    modelSource = "settings.firstEnabledModel";
   }
 
   const compositeModelKey = `${effectiveProvider}:${effectiveModelId}`;
@@ -1384,7 +1407,10 @@ const createOrResumeSession = async (
         activeSkillNames: existing.activeSkillNames,
         reusedSession: true,
       });
-      return existing;
+      return {
+        ...existing,
+        modelSource,
+      };
     }
   }
 
@@ -1483,16 +1509,21 @@ const createOrResumeSession = async (
     : SessionManager.continueRecent(projectCwd, sessionDir);
   const previousContextModel =
     resumedSessionManager?.buildSessionContext().model;
-  const shouldStartFreshForModelMismatch = Boolean(
+  const modelChangedFromPersistedContext = Boolean(
     previousContextModel &&
     (previousContextModel.provider !== effectiveProvider ||
       previousContextModel.modelId !== effectiveModelId),
   );
   const sessionManager =
-    startFreshRequested || shouldStartFreshForModelMismatch
-      ? SessionManager.create(projectCwd, sessionDir)
-      : (resumedSessionManager ??
-        SessionManager.create(projectCwd, sessionDir));
+    resumedSessionManager ?? SessionManager.create(projectCwd, sessionDir);
+  if (modelChangedFromPersistedContext) {
+    logger.info("Restoring persisted session context with a different model", {
+      scope: scopeKey,
+      chatSessionId,
+      previousModelId: `${previousContextModel?.provider}:${previousContextModel?.modelId}`,
+      nextModelId: compositeModelKey,
+    });
+  }
 
   const contextDir = getContextDirectoryForScope(scope, projectCwd);
   const [project, contextFiles, developerMetadata, activeSkills] =
@@ -1623,7 +1654,10 @@ const createOrResumeSession = async (
   agentSessionStore.set(storeKey, entry);
   freshSessionOnNextPrompt.delete(storeKey);
 
-  return entry;
+  return {
+    ...entry,
+    modelSource,
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -1686,7 +1720,12 @@ export const agentService = {
       normalizeMediaMarkdownInText(assistantText.trim() || "已停止当前回答。");
 
     try {
-      const { session } = await createOrResumeSession(
+      const {
+        session,
+        modelId,
+        modelSource,
+        thinkingLevel: resolvedThinkingLevel,
+      } = await createOrResumeSession(
         payload.scope,
         projectCwd,
         payload.sessionId,
@@ -1697,6 +1736,17 @@ export const agentService = {
         payload.delegationContext,
         delegationReportState,
       );
+
+      logger.info("Agent turn resolved runtime", {
+        requestId,
+        scope: getScopeKey(payload.scope),
+        agent: getAgentLogLabel(payload.scope),
+        chatSessionId: payload.sessionId,
+        module: payload.module,
+        modelId,
+        modelSource,
+        thinkingLevel: resolvedThinkingLevel,
+      });
 
       if (isRequestInterrupted()) {
         const finalMessage = buildInterruptedMessage();
@@ -1716,6 +1766,7 @@ export const agentService = {
       }
 
       let streamedLength = 0;
+      let streamedThinkingLength = 0;
       const toolStartTimes = new Map<string, number>();
       let toolProgressCount = 0;
       let toolOutputCount = 0;
@@ -1759,6 +1810,52 @@ export const agentService = {
               createdAt: nowISO(),
               type: "assistant_delta",
               delta: llmEvent.delta,
+            });
+            return;
+          }
+
+          if (llmEvent.type === "thinking_start") {
+            emit({
+              requestId,
+              sessionId: payload.sessionId,
+              scope: payload.scope,
+              module: payload.module,
+              createdAt: nowISO(),
+              type: "thinking_start",
+            });
+            return;
+          }
+
+          if (llmEvent.type === "thinking_delta") {
+            streamedThinkingLength += llmEvent.delta.length;
+            emit({
+              requestId,
+              sessionId: payload.sessionId,
+              scope: payload.scope,
+              module: payload.module,
+              createdAt: nowISO(),
+              type: "thinking_delta",
+              delta: llmEvent.delta,
+            });
+            return;
+          }
+
+          if (llmEvent.type === "thinking_end") {
+            const thinkingContent = llmEvent.content?.trim() ?? "";
+            if (thinkingContent) {
+              streamedThinkingLength = Math.max(
+                streamedThinkingLength,
+                thinkingContent.length,
+              );
+            }
+            emit({
+              requestId,
+              sessionId: payload.sessionId,
+              scope: payload.scope,
+              module: payload.module,
+              createdAt: nowISO(),
+              type: "thinking_end",
+              thinking: thinkingContent || undefined,
             });
             return;
           }
@@ -1877,6 +1974,24 @@ export const agentService = {
         if (event.type === "message_end") {
           const msg = event.message;
           if (msg.role === "assistant" && Array.isArray(msg.content)) {
+            const fullThinking = msg.content
+              .map((c: { type?: string; thinking?: string }) =>
+                c?.type === "thinking" ? (c.thinking ?? "") : "",
+              )
+              .join("")
+              .trim();
+            if (fullThinking && fullThinking.length > streamedThinkingLength) {
+              emit({
+                requestId,
+                sessionId: payload.sessionId,
+                scope: payload.scope,
+                module: payload.module,
+                createdAt: nowISO(),
+                type: "thinking_end",
+                thinking: fullThinking,
+              });
+              streamedThinkingLength = fullThinking.length;
+            }
             const fullText = msg.content
               .map((c: { type?: string; text?: string }) =>
                 c?.type === "text" ? (c.text ?? "") : "",
@@ -1962,7 +2077,13 @@ export const agentService = {
       // Send the prompt
       logger.info("Agent prompt starting", {
         requestId,
+        scope: getScopeKey(payload.scope),
+        agent: getAgentLogLabel(payload.scope),
+        chatSessionId: payload.sessionId,
         module: payload.module,
+        modelId,
+        modelSource,
+        thinkingLevel: resolvedThinkingLevel,
         hasImages: attachmentContent.images.length > 0,
         hasDelegationContext: Boolean(payload.delegationContext),
       });
@@ -2089,6 +2210,20 @@ export const agentService = {
         });
       }
 
+      logger.info("Agent prompt completed", {
+        requestId,
+        scope: getScopeKey(payload.scope),
+        agent: getAgentLogLabel(payload.scope),
+        chatSessionId: payload.sessionId,
+        module: payload.module,
+        modelId,
+        modelSource,
+        thinkingLevel: resolvedThinkingLevel,
+        interrupted: isRequestInterrupted(),
+        toolOutputCount,
+        assistantTextLength: assistantText.length,
+      });
+
       return {
         assistantMessage: finalMessage,
         toolActions: [...toolActionsFromAgent],
@@ -2163,6 +2298,15 @@ export const agentService = {
         module: payload.module,
         createdAt: nowISO(),
         type: "error",
+        error: message,
+      });
+
+      logger.warn("Agent prompt failed", {
+        requestId,
+        scope: getScopeKey(payload.scope),
+        agent: getAgentLogLabel(payload.scope),
+        chatSessionId: payload.sessionId,
+        module: payload.module,
         error: message,
       });
 

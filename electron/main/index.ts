@@ -50,7 +50,6 @@ const OPEN_MAIN_AGENT_SESSION_CHANNEL = 'window:open-main-agent-session';
 const QUICK_LAUNCHER_ROUTE = '/quick-launcher';
 const QUICK_LAUNCHER_WIDTH = 520;
 const QUICK_LAUNCHER_MIN_HEIGHT = 132;
-const QUICK_LAUNCHER_MAX_HEIGHT = 680;
 const DEFAULT_QUICK_LAUNCHER_ACCELERATOR =
   keyboardShortcutToElectronAccelerator(
     DEFAULT_SHORTCUT_CONFIG.quickLauncher,
@@ -306,9 +305,7 @@ const buildQuickLauncherWindowOptions = (
     width: QUICK_LAUNCHER_WIDTH,
     height: QUICK_LAUNCHER_MIN_HEIGHT,
     minWidth: QUICK_LAUNCHER_WIDTH,
-    maxWidth: QUICK_LAUNCHER_WIDTH,
     minHeight: QUICK_LAUNCHER_MIN_HEIGHT,
-    maxHeight: QUICK_LAUNCHER_MAX_HEIGHT,
     useContentSize: true,
     frame: false,
     resizable: false,
@@ -404,7 +401,11 @@ const registerLocalMediaProtocol = (): void => {
       }
 
       const projectId = parsed.searchParams.get('projectId')?.trim() || undefined;
-      const resolvedPath = resolveLocalMediaPath(encodedPath, { projectId });
+      const documentPath = parsed.searchParams.get('documentPath')?.trim() || undefined;
+      const resolvedPath = resolveLocalMediaPath(encodedPath, {
+        projectId,
+        documentPath,
+      });
       if (!resolvedPath) {
         return new Response('Bad Request', { status: 400 });
       }
@@ -1170,10 +1171,7 @@ app
         return { ok: false, error: { code: 'VALIDATION_ERROR', message: 'height must be a number' } };
       }
 
-      const nextHeight = Math.max(
-        QUICK_LAUNCHER_MIN_HEIGHT,
-        Math.min(QUICK_LAUNCHER_MAX_HEIGHT, Math.round(requestedHeight))
-      );
+      const nextHeight = Math.max(QUICK_LAUNCHER_MIN_HEIGHT, Math.round(requestedHeight));
       const [contentWidth, contentHeight] = win.getContentSize();
       if (contentHeight !== nextHeight) {
         win.setContentSize(contentWidth, nextHeight, true);
