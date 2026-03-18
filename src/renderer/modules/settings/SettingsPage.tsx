@@ -169,7 +169,6 @@ const DEFAULT_CUSTOM_MODEL_FORM_VALUE = (): CustomModelFormValue => ({
   id: "",
   name: "",
   reasoning: false,
-  supportsImage: false,
   contextWindow: 128000,
   maxTokens: 16384,
 });
@@ -180,7 +179,6 @@ const customModelFormValueFromConfig = (
   id: model.id,
   name: model.name ?? "",
   reasoning: model.reasoning,
-  supportsImage: model.input.includes("image"),
   contextWindow: model.contextWindow,
   maxTokens: model.maxTokens,
 });
@@ -193,9 +191,7 @@ const normalizeCustomModelFormValues = (
       id: String(value.id ?? "").trim(),
       name: String(value.name ?? "").trim() || undefined,
       reasoning: Boolean(value.reasoning),
-      input: value.supportsImage
-        ? (["text", "image"] as Array<"text" | "image">)
-        : (["text"] as Array<"text" | "image">),
+      input: ["text"] as Array<"text" | "image">,
       contextWindow: Number(value.contextWindow ?? 0),
       maxTokens: Number(value.maxTokens ?? 0),
     }))
@@ -242,7 +238,6 @@ type CustomModelFormValue = {
   id: string;
   name?: string;
   reasoning: boolean;
-  supportsImage: boolean;
   contextWindow: number;
   maxTokens: number;
 };
@@ -259,7 +254,6 @@ const cloneCustomModelFormValues = (
     id: String(value.id ?? ""),
     name: String(value.name ?? ""),
     reasoning: Boolean(value.reasoning),
-    supportsImage: Boolean(value.supportsImage),
     contextWindow: Number(value.contextWindow ?? 0),
     maxTokens: Number(value.maxTokens ?? 0),
   }));
@@ -1774,62 +1768,34 @@ export const SettingsPage = () => {
                       />
 
                       <div className="mt-2">
-                        <Form.Item name="enabled" valuePropName="checked">
-                          <Switch
-                            checkedChildren="已启用"
-                            unCheckedChildren="未启用"
-                          />
-                        </Form.Item>
+                        {isCustomApiProvider ? (
+                          <Typography.Paragraph className="!text-slate-600">
+                            {t(
+                              "Custom API 用于接入兼容 OpenAI、Anthropic 或其他受支持协议的服务。API Key 可选；是否填写取决于你的服务是否要求鉴权。",
+                            )}
+                          </Typography.Paragraph>
+                        ) : null}
 
-                        <Form.Item
-                          name="secret"
-                          label={getFieldLabel(
-                            providerMeta.keyLabel,
-                            tokenFilled,
-                          )}
-                          rules={[
-                            {
-                              validator: async (_, value) => {
-                                const enabled =
-                                  claudeForm.getFieldValue("enabled");
-                                if (enabled && !String(value ?? "").trim()) {
-                                  return Promise.reject(
-                                    new Error(
-                                      "启用 Provider 时必须设置 API Key",
-                                    ),
-                                  );
-                                }
-                                const trimmed = String(value ?? "").trim();
-                                if (trimmed && trimmed.length < 10) {
-                                  return Promise.reject(
-                                    new Error("凭证长度至少 10 位"),
-                                  );
-                                }
-                                return Promise.resolve();
-                              },
-                            },
-                          ]}
-                        >
-                          <Input.Password
-                            placeholder={providerMeta.keyPlaceholder}
-                          />
-                        </Form.Item>
+                        {!isCustomApiProvider ? (
+                          <Form.Item name="enabled" valuePropName="checked">
+                            <Switch
+                              checkedChildren="已启用"
+                              unCheckedChildren="未启用"
+                            />
+                          </Form.Item>
+                        ) : null}
 
                         {isCustomApiProvider ? (
                           <>
-                            <Typography.Paragraph className="!text-slate-600">
-                              {t(
-                                "填写 URL 后会将当前 Provider 的请求路由到该地址；配置自定义模型后，这些模型会出现在下面的启用模型列表中。",
-                              )}
-                            </Typography.Paragraph>
-
                             <Form.Item
                               name="baseUrl"
                               label={getFieldLabel(
                                 "自定义 URL",
                                 Boolean(baseUrlText),
                               )}
-                              extra="留空表示使用 Provider 默认地址；填写后会把当前 Provider 的请求路由到该地址。"
+                              extra={t(
+                                "填写 API 根地址，不要包含 /chat/completions、/responses、/messages 等具体接口路径。",
+                              )}
                               rules={[
                                 {
                                   validator: async (_, value) => {
@@ -1866,7 +1832,9 @@ export const SettingsPage = () => {
                                 "自定义模型 API 类型",
                                 Boolean(apiText),
                               )}
-                              extra="仅在添加自定义模型时需要选择。"
+                              extra={t(
+                                "选择你的服务实际兼容的协议类型；大多数 OpenAI 兼容服务应选择 openai-completions。",
+                              )}
                               rules={[
                                 {
                                   validator: async (_, value) => {
@@ -1900,6 +1868,62 @@ export const SettingsPage = () => {
                                 }))}
                               />
                             </Form.Item>
+                          </>
+                        ) : null}
+
+                        <Form.Item
+                          name="secret"
+                          label={getFieldLabel(
+                            providerMeta.keyLabel,
+                            tokenFilled,
+                          )}
+                          extra={
+                            isCustomApiProvider
+                              ? t(
+                                  "Custom API 的 API Key 为可选项；如果你的服务不要求 Bearer Token，可以留空。",
+                                )
+                              : undefined
+                          }
+                          rules={[
+                            {
+                              validator: async (_, value) => {
+                                const enabled =
+                                  claudeForm.getFieldValue("enabled");
+                                if (
+                                  enabled &&
+                                  !isCustomApiProvider &&
+                                  !String(value ?? "").trim()
+                                ) {
+                                  return Promise.reject(
+                                    new Error(
+                                      "启用 Provider 时必须设置 API Key",
+                                    ),
+                                  );
+                                }
+                                const trimmed = String(value ?? "").trim();
+                                if (trimmed && trimmed.length < 10) {
+                                  return Promise.reject(
+                                    new Error("凭证长度至少 10 位"),
+                                  );
+                                }
+                                return Promise.resolve();
+                              },
+                            },
+                          ]}
+                        >
+                          <Input.Password
+                            placeholder={providerMeta.keyPlaceholder}
+                          />
+                        </Form.Item>
+
+                        {isCustomApiProvider ? (
+                          <>
+                            <Form.Item name="enabled" valuePropName="checked">
+                              <Switch
+                                checkedChildren="已启用"
+                                unCheckedChildren="未启用"
+                              />
+                            </Form.Item>
 
                             <Form.List name="customModels">
                               {(fields, { add, remove }) => (
@@ -1908,7 +1932,9 @@ export const SettingsPage = () => {
                                     "自定义模型",
                                     customModelsFilled,
                                   )}
-                                  extra="配置后会直接作为当前 Provider 的模型列表。"
+                                  extra={t(
+                                    "这里定义 Custom API 可用的模型。新增后会出现在下方的启用模型列表中。",
+                                  )}
                                   className="[&_.ant-form-item-label>label]:after:!content-none"
                                 >
                                   <div className="flex flex-col gap-3">
@@ -2016,17 +2042,6 @@ export const SettingsPage = () => {
                                               unCheckedChildren="否"
                                             />
                                           </Form.Item>
-                                          <Form.Item
-                                            {...field}
-                                            name={[field.name, "supportsImage"]}
-                                            label="支持图片输入"
-                                            valuePropName="checked"
-                                          >
-                                            <Switch
-                                              checkedChildren="是"
-                                              unCheckedChildren="否"
-                                            />
-                                          </Form.Item>
                                         </div>
                                       </div>
                                     ))}
@@ -2081,7 +2096,7 @@ export const SettingsPage = () => {
                               (m) => ({
                                 id: m.id,
                                 title: m.name,
-                                description: `${m.id} · ctx ${Math.round(m.contextWindow / 1024)}k · max ${Math.round(m.maxTokens / 1024)}k${m.reasoning ? " · reasoning" : ""}${Array.isArray(m.input) && m.input.includes("image") ? ` · ${t("支持图片输入")}` : ""}${m.source === "custom" ? ` · ${t("自定义")}` : ""}`,
+                                description: `${m.id} · ctx ${Math.round(m.contextWindow / 1024)}k · max ${Math.round(m.maxTokens / 1024)}k${m.reasoning ? " · reasoning" : ""}${m.source === "custom" ? ` · ${t("自定义")}` : ""}`,
                               }),
                             )}
                             empty={

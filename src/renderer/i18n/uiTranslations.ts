@@ -782,6 +782,16 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "Switch Provider tabs to choose an integration, configure the corresponding API key, and enable models.",
   "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。":
     "Switch Provider tabs to choose an integration, configure the corresponding API key, and enable models. Custom API sits alongside OpenRouter and is used for Custom URL, custom API type, and model list settings.",
+  "Custom API 的 API Key 为可选项；如果你的服务不要求 Bearer Token，可以留空。":
+    "API key is optional for Custom API. Leave it empty if your service does not require a Bearer token.",
+  "Custom API 用于接入兼容 OpenAI、Anthropic 或其他受支持协议的服务。API Key 可选；是否填写取决于你的服务是否要求鉴权。":
+    "Custom API connects to services compatible with OpenAI, Anthropic, or other supported protocols. The API key is optional and only needed when your service requires authentication.",
+  "填写 API 根地址，不要包含 /chat/completions、/responses、/messages 等具体接口路径。":
+    "Enter the API root URL only. Do not include endpoint paths such as /chat/completions, /responses, or /messages.",
+  "选择你的服务实际兼容的协议类型；大多数 OpenAI 兼容服务应选择 openai-completions。":
+    "Choose the protocol your service actually implements. Most OpenAI-compatible services should use openai-completions.",
+  "这里定义 Custom API 可用的模型。新增后会出现在下方的启用模型列表中。":
+    "Define the models available through Custom API here. New models will appear in the enabled model list below.",
   "并启用模型。可选的 URL、自定义 API 类型和模型配置遵循 pi-mono 的 provider 覆盖方式：只填 URL 会重定向当前 Provider 的内置模型，配置自定义模型后则改为使用自定义模型列表。":
     "Optional URL, custom API type, and model settings follow pi-mono provider override semantics: URL-only reroutes built-in models, while custom models replace the provider model list.",
   "Provider": "Provider",
@@ -1251,6 +1261,16 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
       "Provider 탭을 전환해 연동 방식을 선택하고, 해당 API Key를 설정한 뒤 모델을 활성화하세요.",
     "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。":
       "Provider 탭을 전환해 연동 방식을 선택하고, 해당 API Key를 설정한 뒤 모델을 활성화하세요. Custom API는 OpenRouter와 같은 레벨의 별도 Provider이며, Custom URL, 사용자 지정 API 유형, 모델 목록 설정에 사용됩니다.",
+    "Custom API 的 API Key 为可选项；如果你的服务不要求 Bearer Token，可以留空。":
+      "Custom API의 API Key는 선택 사항입니다. 서비스에서 Bearer 토큰 인증을 요구하지 않으면 비워 둘 수 있습니다.",
+    "Custom API 用于接入兼容 OpenAI、Anthropic 或其他受支持协议的服务。API Key 可选；是否填写取决于你的服务是否要求鉴权。":
+      "Custom API는 OpenAI, Anthropic 또는 기타 지원 프로토콜과 호환되는 서비스를 연결하는 데 사용됩니다. API Key는 선택 사항이며 서비스에서 인증을 요구할 때만 필요합니다.",
+    "填写 API 根地址，不要包含 /chat/completions、/responses、/messages 等具体接口路径。":
+      "API 루트 주소만 입력하세요. /chat/completions, /responses, /messages 같은 구체적인 엔드포인트 경로는 포함하지 마세요.",
+    "选择你的服务实际兼容的协议类型；大多数 OpenAI 兼容服务应选择 openai-completions。":
+      "서비스가 실제로 호환되는 프로토콜 유형을 선택하세요. 대부분의 OpenAI 호환 서비스는 openai-completions를 선택하면 됩니다.",
+    "这里定义 Custom API 可用的模型。新增后会出现在下方的启用模型列表中。":
+      "여기에서 Custom API로 사용할 모델을 정의합니다. 새 모델을 추가하면 아래 활성화 모델 목록에 표시됩니다.",
     "并启用模型。可选的 URL、自定义 API 类型和模型配置遵循 pi-mono 的 provider 覆盖方式：只填 URL 会重定向当前 Provider 的内置模型，配置自定义模型后则改为使用自定义模型列表。":
       "선택 사항인 URL, 사용자 지정 API 유형, 모델 설정은 pi-mono의 provider override 방식과 동일합니다. URL만 입력하면 내장 모델이 해당 주소로 라우팅되고, 사용자 지정 모델을 설정하면 현재 Provider의 모델 목록이 사용자 지정 목록으로 대체됩니다.",
     "Provider": "Provider",

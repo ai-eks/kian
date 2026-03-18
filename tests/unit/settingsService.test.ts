@@ -478,6 +478,52 @@ describe("settingsService.getAgentSystemPrompt", () => {
     );
   });
 
+  it("treats Custom API as configured without an API key when URL, API type, and custom models are present", async () => {
+    const { settingsService } = await import(
+      "../../electron/main/services/settingsService"
+    );
+
+    await settingsService.saveClaudeConfig({
+      provider: "custom-api",
+      enabled: true,
+      baseUrl: "http://localhost:2276/v1",
+      api: "openai-completions",
+      customModels: [
+        {
+          id: "qwen3.5-small-9b",
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 131072,
+          maxTokens: 8192,
+        },
+      ],
+      enabledModels: ["qwen3.5-small-9b"],
+    });
+
+    await expect(settingsService.getClaudeStatus()).resolves.toMatchObject({
+      providers: {
+        "custom-api": {
+          configured: true,
+          apiKey: "",
+          baseUrl: "http://localhost:2276/v1",
+          api: "openai-completions",
+          enabledModels: ["qwen3.5-small-9b"],
+        },
+      },
+      allEnabledModels: [
+        {
+          provider: "custom-api",
+          modelId: "qwen3.5-small-9b",
+          modelName: "qwen3.5-small-9b",
+        },
+      ],
+    });
+
+    await expect(settingsService.getClaudeSecret("custom-api")).resolves.toBe(
+      "kian-custom-api-no-auth",
+    );
+  });
+
   it("persists model selection separately for main and project scopes", async () => {
     const { settingsService } = await import(
       "../../electron/main/services/settingsService"

@@ -686,6 +686,41 @@ const getConfiguredEnabledModels = (
   return providerEntry.enabledModels.filter((modelId) => availableIds.has(modelId));
 };
 
+const isCustomApiProviderEntryConfigured = (
+  providerEntry: ProviderEntry | undefined,
+): boolean =>
+  Boolean(
+    providerEntry &&
+      providerEntry.baseUrl &&
+      providerEntry.api &&
+      providerEntry.customModels.length > 0,
+  );
+
+const isProviderEntryConfigured = (
+  providerEntry: ProviderEntry | undefined,
+): boolean => {
+  if (!providerEntry) return false;
+  if (normalizeAgentProviderId(providerEntry.provider) === CUSTOM_API_PROVIDER) {
+    return isCustomApiProviderEntryConfigured(providerEntry);
+  }
+  return Boolean(providerEntry.apiKey);
+};
+
+const getProviderRuntimeApiKey = (
+  providerEntry: ProviderEntry | undefined,
+): string | null => {
+  if (!providerEntry) return null;
+  if (providerEntry.apiKey) {
+    return providerEntry.apiKey;
+  }
+  if (normalizeAgentProviderId(providerEntry.provider) === CUSTOM_API_PROVIDER) {
+    return isCustomApiProviderEntryConfigured(providerEntry)
+      ? "kian-custom-api-no-auth"
+      : null;
+  }
+  return null;
+};
+
 const resolveConfiguredModel = (
   provider: string,
   modelId: string,
@@ -1186,7 +1221,7 @@ export const settingsService = {
     }[] = [];
 
     for (const entry of settings.providers) {
-      const configured = Boolean(entry.apiKey);
+      const configured = isProviderEntryConfigured(entry);
       const enabledModels = getConfiguredEnabledModels(entry);
       providers[entry.provider] = {
         configured,
@@ -1237,7 +1272,7 @@ export const settingsService = {
     const entry = settings.providers.find(
       (e) => e.provider === normalizeAgentProviderId(provider),
     );
-    return entry?.apiKey || null;
+    return getProviderRuntimeApiKey(entry);
   },
 
   async saveModelProviderConfig(input: {
