@@ -465,16 +465,51 @@ describe("settingsService.getAgentSystemPrompt", () => {
     });
   });
 
-  it("includes Custom API as a top-level language model provider", async () => {
+  it("includes legacy Custom API provider when it already exists in settings", async () => {
     const { settingsService } = await import(
       "../../electron/main/services/settingsService"
     );
 
-    expect(settingsService.getAvailableProviders()).toEqual(
+    await settingsService.saveClaudeConfig({
+      provider: "custom-api",
+      displayName: "Custom API",
+      enabled: false,
+      baseUrl: "http://localhost:2276/v1",
+      api: "openai-completions",
+      customModels: [],
+      enabledModels: [],
+    });
+
+    await expect(settingsService.getAvailableProviders()).resolves.toEqual(
       expect.arrayContaining([
         {
           id: "custom-api",
           name: "Custom API",
+        },
+      ]),
+    );
+  });
+
+  it("lists saved custom providers with their display names", async () => {
+    const { settingsService } = await import(
+      "../../electron/main/services/settingsService"
+    );
+
+    await settingsService.saveClaudeConfig({
+      provider: "custom-api__moonshot-demo",
+      displayName: "Moonshot Proxy",
+      enabled: false,
+      baseUrl: "https://proxy.example.com/v1",
+      api: "openai-completions",
+      customModels: [],
+      enabledModels: [],
+    });
+
+    await expect(settingsService.getAvailableProviders()).resolves.toEqual(
+      expect.arrayContaining([
+        {
+          id: "custom-api__moonshot-demo",
+          name: "Moonshot Proxy",
         },
       ]),
     );

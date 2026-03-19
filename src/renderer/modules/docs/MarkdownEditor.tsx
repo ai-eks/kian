@@ -12,7 +12,7 @@ import {
   isDocPassthroughUrl,
   resolveDocLocalUrl,
 } from "@renderer/modules/docs/docMedia";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import Editor, { type BeforeMount, type OnMount } from "@monaco-editor/react";
 import { ScrollArea } from "@renderer/components/ScrollArea";
 import { Button, Typography } from "antd";
 import type { editor } from "monaco-editor";
@@ -200,10 +200,51 @@ export const MarkdownEditor = ({
   const markdownPreviewEnabled = useMemo(() => isMarkdownDocument(title), [title]);
   const editorLanguage = useMemo(() => inferDocumentLanguage(title), [title]);
   const showingMarkdownPreview = markdownPreviewEnabled && readMode;
+  const editorTheme = resolvedTheme === "dark" ? "kian-docs-dark" : "kian-docs-light";
 
-  const handleMount = useCallback<OnMount>((instance) => {
-    editorRef.current = instance;
+  const handleBeforeMount = useCallback<BeforeMount>((monaco) => {
+    monaco.editor.defineTheme("kian-docs-light", {
+      base: "vs",
+      inherit: true,
+      rules: [],
+      colors: {
+        "editor.background": "#f8fafc",
+        "editorGutter.background": "#f8fafc",
+        "editorLineNumber.foreground": "#94a3b8",
+        "editorLineNumber.activeForeground": "#334155",
+        "editor.lineHighlightBackground": "#eef4ff",
+        "editor.selectionBackground": "#dbeafe",
+        "editor.inactiveSelectionBackground": "#e2e8f0",
+        "editorCursor.foreground": "#2563eb",
+        "editorIndentGuide.background1": "#e2e8f0",
+        "editorIndentGuide.activeBackground1": "#cbd5e1",
+        "editorWhitespace.foreground": "#cbd5e1",
+      },
+    });
+    monaco.editor.defineTheme("kian-docs-dark", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [],
+      colors: {
+        "editor.background": "#0d1728",
+        "editorGutter.background": "#0d1728",
+        "editorLineNumber.foreground": "#536b8e",
+        "editorLineNumber.activeForeground": "#c9d6ea",
+        "editor.lineHighlightBackground": "#15243c",
+        "editor.selectionBackground": "#23476f",
+        "editor.inactiveSelectionBackground": "#19314e",
+        "editorCursor.foreground": "#76a8ff",
+        "editorIndentGuide.background1": "#223146",
+        "editorIndentGuide.activeBackground1": "#375071",
+        "editorWhitespace.foreground": "#223146",
+      },
+    });
   }, []);
+
+  const handleMount = useCallback<OnMount>((instance, monaco) => {
+    monaco.editor.setTheme(editorTheme);
+    editorRef.current = instance;
+  }, [editorTheme]);
 
   const options = useMemo<editor.IStandaloneEditorConstructionOptions>(
     () => ({
@@ -211,7 +252,11 @@ export const MarkdownEditor = ({
       fontSize: 14,
       lineHeight: 24,
       fontFamily: "'JetBrains Mono', 'IBM Plex Mono', Menlo, monospace",
-      lineNumbers: markdownPreviewEnabled ? "off" : "on",
+      lineNumbers: "off",
+      lineDecorationsWidth: 6,
+      lineNumbersMinChars: 0,
+      glyphMargin: false,
+      folding: false,
       wordWrap: markdownPreviewEnabled ? "on" : "off",
       scrollBeyondLastLine: false,
       automaticLayout: true,
@@ -237,8 +282,8 @@ export const MarkdownEditor = ({
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-[#dbe5f5] bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
-      <div className="flex items-center justify-between px-3 py-2">
+    <div className="docs-editor-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl">
+      <div className="docs-editor-panel__header flex items-center justify-between px-3 py-2">
         <div className="min-w-0">
           <Typography.Text
             className="!mb-0 !font-semibold !text-slate-900"
@@ -266,9 +311,9 @@ export const MarkdownEditor = ({
           ) : null}
         </div>
       </div>
-      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div className="docs-editor-panel__body min-h-0 min-w-0 flex-1 overflow-hidden">
         {showingMarkdownPreview ? (
-          <ScrollArea className="h-full">
+          <ScrollArea className="docs-editor-panel__preview h-full">
             <div className="px-3 py-2">
               {value.trim() ? (
                 <ReactMarkdown
@@ -500,9 +545,10 @@ export const MarkdownEditor = ({
           </ScrollArea>
         ) : (
           <Editor
+            beforeMount={handleBeforeMount}
             height="100%"
             language={editorLanguage}
-            theme={resolvedTheme === "dark" ? "vs-dark" : "vs"}
+            theme={editorTheme}
             value={value}
             onMount={handleMount}
             onChange={(next) => onChange(next ?? "")}

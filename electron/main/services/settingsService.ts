@@ -41,6 +41,7 @@ import { GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_PATH, INTERNAL_ROOT, WORKSPACE_ROOT } 
 const SETTINGS_PATH = path.join(INTERNAL_ROOT, "settings.json");
 const LEGACY_WORKSPACE_SETTINGS_PATH = path.join(WORKSPACE_ROOT, "settings.json");
 const CUSTOM_API_PROVIDER = "custom-api";
+const CUSTOM_API_PROVIDER_PREFIX = "custom-api__";
 const LEGACY_OPENAI_COMPATIBLE_PROVIDER = "openai-compatible";
 
 const normalizeAgentProviderId = (provider: string): string =>
@@ -48,8 +49,26 @@ const normalizeAgentProviderId = (provider: string): string =>
     ? CUSTOM_API_PROVIDER
     : provider;
 
+const isCustomAgentProviderId = (provider: string): boolean => {
+  const normalized = normalizeAgentProviderId(provider);
+  return (
+    normalized === CUSTOM_API_PROVIDER ||
+    normalized.startsWith(CUSTOM_API_PROVIDER_PREFIX)
+  );
+};
+
+const toProviderDisplayName = (providerId: string): string =>
+  providerId
+    .split("-")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+
+const getDefaultCustomProviderDisplayName = (providerId: string): string =>
+  providerId === CUSTOM_API_PROVIDER ? "Custom API" : "Custom Provider";
+
 interface ProviderEntry {
   provider: string;
+  displayName?: string;
   enabled: boolean;
   apiKey: string;
   baseUrl?: string;
@@ -621,8 +640,20 @@ const normalizeProviderEntries = (input: unknown): ProviderEntry[] => {
         },
         [],
       );
+      const providerId = normalizeAgentProviderId(rawEntry.provider as string);
+      const normalizedDisplayName =
+        typeof rawEntry.displayName === "string" &&
+        rawEntry.displayName.trim().length > 0
+          ? rawEntry.displayName.trim()
+          : typeof rawEntry.name === "string" && rawEntry.name.trim().length > 0
+            ? rawEntry.name.trim()
+            : undefined;
       return {
-        provider: normalizeAgentProviderId(rawEntry.provider as string),
+        provider: providerId,
+        displayName: isCustomAgentProviderId(providerId)
+          ? normalizedDisplayName ??
+            getDefaultCustomProviderDisplayName(providerId)
+          : undefined,
         enabled: typeof rawEntry.enabled === "boolean" ? rawEntry.enabled : Boolean(apiKey),
         apiKey,
         baseUrl: normalizeOptionalHttpUrl(rawEntry.baseUrl),
@@ -672,7 +703,7 @@ const getConfiguredModelsForProvider = (
     );
   }
 
-  if (normalizeAgentProviderId(provider) === CUSTOM_API_PROVIDER) {
+  if (isCustomAgentProviderId(provider)) {
     return [];
   }
 
@@ -710,7 +741,7 @@ const isProviderEntryConfigured = (
   providerEntry: ProviderEntry | undefined,
 ): boolean => {
   if (!providerEntry) return false;
-  if (normalizeAgentProviderId(providerEntry.provider) === CUSTOM_API_PROVIDER) {
+  if (isCustomAgentProviderId(providerEntry.provider)) {
     return isCustomApiProviderEntryConfigured(providerEntry);
   }
   return Boolean(providerEntry.apiKey);
@@ -723,7 +754,7 @@ const getProviderRuntimeApiKey = (
   if (providerEntry.apiKey) {
     return providerEntry.apiKey;
   }
-  if (normalizeAgentProviderId(providerEntry.provider) === CUSTOM_API_PROVIDER) {
+  if (isCustomAgentProviderId(providerEntry.provider)) {
     return isCustomApiProviderEntryConfigured(providerEntry)
       ? "kian-custom-api-no-auth"
       : null;
@@ -737,7 +768,7 @@ const resolveConfiguredModel = (
   providerEntry?: ProviderEntry,
 ): Model<Api> | null => {
   if (
-    normalizeAgentProviderId(provider) === CUSTOM_API_PROVIDER ||
+    isCustomAgentProviderId(provider) ||
     providerEntry?.customModels.length
   ) {
     const resolvedBaseUrl = providerEntry?.baseUrl;
@@ -1164,6 +1195,7 @@ const resolveDiscordBotTokenFromSettings = async (
 export const settingsService = {
   async saveClaudeConfig(input: {
     provider: string;
+    displayName?: string;
     enabled: boolean;
     secret?: string;
     baseUrl?: string;
@@ -1176,8 +1208,14 @@ export const settingsService = {
       const providerId = normalizeAgentProviderId(input.provider);
       const existing = settings.providers.find((e) => e.provider === providerId);
       const nextApiKey = input.secret ?? existing?.apiKey ?? "";
+      const nextDisplayName = isCustomAgentProviderId(providerId)
+        ? normalizeOptionalString(input.displayName) ??
+          existing?.displayName ??
+          getDefaultCustomProviderDisplayName(providerId)
+        : undefined;
       const nextEntryDraft: ProviderEntry = {
         provider: providerId,
+        displayName: nextDisplayName,
         enabled: input.enabled,
         apiKey: nextApiKey,
         baseUrl: normalizeOptionalHttpUrl(input.baseUrl),
@@ -1901,7 +1939,8 @@ export const settingsService = {
     });
   },
 
-  getAvailableProviders(): AgentProviderDTO[] {
+  async getAvailableProviders(): Promise<AgentProviderDTO[]> {
+    const settings = await readSettingsFile();
     const hidden = new Set([
       'anthropic',
       'openai-codex',
@@ -1913,17 +1952,24 @@ export const settingsService = {
       .filter((id) => !hidden.has(id))
       .map((id) => ({
         id,
-        name: id.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' '),
+        name: toProviderDisplayName(id),
       }));
-    const openRouterIndex = providers.findIndex((provider) => provider.id === "openrouter");
-    const customProvider = {
-      id: CUSTOM_API_PROVIDER,
-      name: "Custom API",
-    };
+    const customProviders = settings.providers
+      .filter((entry) => isCustomAgentProviderId(entry.provider))
+      .map((entry) => ({
+        id: entry.provider,
+        name:
+          entry.displayName?.trim() ||
+          getDefaultCustomProviderDisplayName(entry.provider),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    const openRouterIndex = providers.findIndex(
+      (provider) => provider.id === "openrouter",
+    );
     if (openRouterIndex >= 0) {
-      providers.splice(openRouterIndex + 1, 0, customProvider);
+      providers.splice(openRouterIndex + 1, 0, ...customProviders);
     } else {
-      providers.push(customProvider);
+      providers.push(...customProviders);
     }
     return providers;
   },
@@ -1950,7 +1996,10 @@ export const settingsService = {
     if (!resolvedModel) {
       return null;
     }
-    if (providerId === CUSTOM_API_PROVIDER && resolvedModel.api === "openai-completions") {
+    if (
+      isCustomAgentProviderId(providerId) &&
+      resolvedModel.api === "openai-completions"
+    ) {
       return {
         ...resolvedModel,
         compat: {

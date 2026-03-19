@@ -186,6 +186,7 @@ describe('ipc validators', () => {
   it('validates language model provider payload with baseUrl and custom models', () => {
     const result = saveApiKeySchema.safeParse({
       provider: 'openai',
+      displayName: 'Moonshot Proxy',
       enabled: true,
       secret: 'sk_test_custom_model',
       baseUrl: 'https://proxy.example.com/v1',

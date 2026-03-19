@@ -278,6 +278,7 @@ const api = {
       invoke<boolean>("settings:setClaudeConfigStatus", { configured }),
     saveClaudeApiKey: (payload: {
       provider: string;
+      displayName?: string;
       enabled: boolean;
       secret?: string;
       baseUrl?: string;

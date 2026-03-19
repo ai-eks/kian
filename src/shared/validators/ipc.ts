@@ -196,6 +196,11 @@ const customAgentModelSchema = z.object({
 
 export const saveApiKeySchema = z.object({
   provider: z.string().min(1).default('anthropic'),
+  displayName: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
   enabled: z.boolean(),
   secret: z
     .string()

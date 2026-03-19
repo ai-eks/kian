@@ -1,4 +1,4 @@
-import { SearchOutlined } from "@ant-design/icons";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import type { MainLayoutOutletContext } from "@renderer/app/MainLayout";
 import { ScrollArea } from "@renderer/components/ScrollArea";
 import { useAppI18n } from "@renderer/i18n/AppI18nProvider";
@@ -35,6 +35,7 @@ import {
   Select,
   Switch,
   Tabs,
+  Modal,
   Typography,
   message,
 } from "antd";
@@ -52,6 +53,25 @@ const SETTINGS_TABS = [
 ] as const;
 
 const CUSTOM_API_PROVIDER = "custom-api";
+const CUSTOM_API_PROVIDER_PREFIX = "custom-api__";
+const CUSTOM_PROVIDER_ENTRY_ENABLED = false;
+
+const isCustomApiProviderId = (provider: string): boolean =>
+  provider === CUSTOM_API_PROVIDER ||
+  provider.startsWith(CUSTOM_API_PROVIDER_PREFIX);
+
+const createCustomProviderId = (displayName: string): string => {
+  const slug = displayName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+  const suffix =
+    globalThis.crypto?.randomUUID?.().slice(0, 8) ??
+    Math.random().toString(36).slice(2, 10);
+  return `${CUSTOM_API_PROVIDER_PREFIX}${slug || "provider"}-${suffix}`;
+};
 
 const CUSTOM_MODEL_API_OPTIONS = [
   "openai-completions",
@@ -81,7 +101,9 @@ const KNOWN_PROVIDER_META: Record<
 };
 
 const getProviderMeta = (provider: string) =>
-  KNOWN_PROVIDER_META[provider] ?? {
+  KNOWN_PROVIDER_META[
+    isCustomApiProviderId(provider) ? CUSTOM_API_PROVIDER : provider
+  ] ?? {
     keyLabel: "API Key",
     keyPlaceholder: "sk-...",
   };
@@ -247,6 +269,13 @@ type CustomModelFormValue = {
 type ProviderFormValues = {
   secret?: string;
   enabledModels: string[];
+};
+
+type CustomProviderFormValues = {
+  displayName: string;
+  secret?: string;
+  baseUrl: string;
+  api?: string;
 };
 
 const cloneCustomModelFormValues = (
@@ -598,6 +627,7 @@ export const SettingsPage = () => {
   const [generalForm] = Form.useForm<GeneralFormValues>();
   const [claudeForm] = Form.useForm<ClaudeFormValues>();
   const [providerForm] = Form.useForm<ProviderFormValues>();
+  const [customProviderForm] = Form.useForm<CustomProviderFormValues>();
   const [telegramForm] = Form.useForm<ChannelFormValues>();
   const [discordForm] = Form.useForm<ChannelFormValues>();
   const [feishuForm] = Form.useForm<ChannelFormValues>();
@@ -619,7 +649,7 @@ export const SettingsPage = () => {
     preserve: true,
   }) ?? "anthropic") as string;
   const providerMeta = getProviderMeta(provider);
-  const isCustomApiProvider = provider === CUSTOM_API_PROVIDER;
+  const isCustomApiProvider = isCustomApiProviderId(provider);
   const providerEnabled =
     Form.useWatch("enabled", { form: claudeForm, preserve: true }) ?? false;
   const secretValue = Form.useWatch("secret", {
@@ -686,6 +716,10 @@ export const SettingsPage = () => {
   const [agentModelSearch, setAgentModelSearch] = useState("");
   const [providerSearch, setProviderSearch] = useState("");
   const [providerModelSearch, setProviderModelSearch] = useState("");
+  const [customProviderModalOpen, setCustomProviderModalOpen] = useState(false);
+  const [editingCustomProviderId, setEditingCustomProviderId] = useState<
+    string | null
+  >(null);
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatusDTO | null>(
     null,
   );
@@ -767,9 +801,10 @@ export const SettingsPage = () => {
   });
 
   const saveClaudeMutation = useMutation({
-    mutationFn: (values: ClaudeFormValues) =>
+    mutationFn: (values: ClaudeFormValues & { displayName?: string }) =>
       api.settings.saveClaudeApiKey({
         provider: values.provider,
+        displayName: values.displayName,
         enabled: values.enabled,
         secret: values.secret,
         baseUrl: values.baseUrl,
@@ -835,7 +870,9 @@ export const SettingsPage = () => {
   });
 
   const sortedProviders = useMemo(() => {
-    const providers = availableProvidersQuery.data ?? [];
+    const providers = (availableProvidersQuery.data ?? []).filter((item) =>
+      CUSTOM_PROVIDER_ENTRY_ENABLED ? true : !isCustomApiProviderId(item.id),
+    );
     const providerStatuses = claudeProviderStatusMap ?? {};
     return [...providers].sort((a, b) => {
       const aActive =
@@ -857,6 +894,12 @@ export const SettingsPage = () => {
       [id, name].some((value) => value.toLowerCase().includes(keyword)),
     );
   }, [providerSearch, sortedProviders]);
+
+  const selectedProviderEntry = useMemo(
+    () => (availableProvidersQuery.data ?? []).find((item) => item.id === provider),
+    [availableProvidersQuery.data, provider],
+  );
+  const selectedProviderName = selectedProviderEntry?.name ?? provider;
 
   const currentClaudeDraft = useMemo(
     () =>
@@ -929,6 +972,94 @@ export const SettingsPage = () => {
     },
     [claudeForm],
   );
+
+  const openCreateCustomProviderModal = useCallback(() => {
+    setEditingCustomProviderId(null);
+    customProviderForm.setFieldsValue({
+      displayName: "",
+      secret: "",
+      baseUrl: "",
+      api: undefined,
+    });
+    setCustomProviderModalOpen(true);
+  }, [customProviderForm]);
+
+  const openEditCustomProviderModal = useCallback(() => {
+    if (!isCustomApiProvider) return;
+    setEditingCustomProviderId(provider);
+    customProviderForm.setFieldsValue({
+      displayName: selectedProviderName,
+      secret: String(secretValue ?? ""),
+      baseUrl: String(baseUrlValue ?? ""),
+      api: String(apiValue ?? "").trim() || undefined,
+    });
+    setCustomProviderModalOpen(true);
+  }, [
+    apiValue,
+    baseUrlValue,
+    customProviderForm,
+    isCustomApiProvider,
+    provider,
+    secretValue,
+    selectedProviderName,
+  ]);
+
+  const closeCustomProviderModal = useCallback(() => {
+    setCustomProviderModalOpen(false);
+    setEditingCustomProviderId(null);
+    customProviderForm.resetFields();
+  }, [customProviderForm]);
+
+  const handleSubmitCustomProvider = useCallback(async () => {
+    const values = await customProviderForm.validateFields();
+    const providerId =
+      editingCustomProviderId ?? createCustomProviderId(values.displayName);
+    const providerDraft =
+      providerId === provider
+        ? currentClaudeDraft
+        : claudeProviderDraftsRef.current[providerId] ??
+          getNormalizedClaudeDraftFromStatus(providerId, claudeStatusQuery.data);
+    try {
+      await saveClaudeMutation.mutateAsync({
+        provider: providerId,
+        displayName: values.displayName.trim(),
+        enabled: editingCustomProviderId ? providerDraft.enabled : false,
+        secret: String(values.secret ?? "").trim() || undefined,
+        baseUrl: String(values.baseUrl ?? "").trim() || undefined,
+        api: String(values.api ?? "").trim() || undefined,
+        customModels: editingCustomProviderId
+          ? cloneCustomModelFormValues(providerDraft.customModels)
+          : [],
+        enabledModels: editingCustomProviderId ? providerDraft.enabledModels : [],
+      });
+      closeCustomProviderModal();
+      await Promise.all([
+        availableProvidersQuery.refetch(),
+        claudeStatusQuery.refetch().then((result) => {
+          if (result.data) {
+            syncClaudeProviderDraftFromStatus(providerId, result.data, {
+              applyToForm: true,
+            });
+          }
+          return result;
+        }),
+      ]);
+      setProviderSearch("");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t("保存失败"));
+    }
+  }, [
+    availableProvidersQuery,
+    claudeStatusQuery,
+    closeCustomProviderModal,
+    currentClaudeDraft,
+    customProviderForm,
+    editingCustomProviderId,
+    provider,
+    saveClaudeMutation,
+    syncClaudeProviderDraftFromStatus,
+    t,
+  ]);
 
   useEffect(() => {
     if (!generalConfigQuery.data) return;
@@ -1897,11 +2028,13 @@ export const SettingsPage = () => {
                 <div className="agent-settings-pane">
                   <div className="agent-settings-pane__header">
                     <Typography.Title level={4} className="!text-slate-900">
-                      语言模型
+                      {t("语言模型")}
                     </Typography.Title>
                     <Typography.Paragraph className="!text-slate-600">
                       {t(
-                        "从左侧选择 Provider，配置对应的 API Key 并启用模型。",
+                        CUSTOM_PROVIDER_ENTRY_ENABLED
+                          ? "从左侧选择 Provider。内置 Provider 可直接配置；自定义 Provider 可通过上方按钮添加后，再为它配置模型。"
+                          : "从左侧选择 Provider，配置对应的 API Key 并启用模型。",
                       )}
                     </Typography.Paragraph>
                   </div>
@@ -1920,9 +2053,25 @@ export const SettingsPage = () => {
                       <Form.Item name="provider" hidden>
                         <Input />
                       </Form.Item>
+                      <Form.Item name="baseUrl" hidden>
+                        <Input />
+                      </Form.Item>
+                      <Form.Item name="api" hidden>
+                        <Input />
+                      </Form.Item>
 
                       <div className="provider-switcher">
                         <div className="provider-switcher__sidebar">
+                          {CUSTOM_PROVIDER_ENTRY_ENABLED ? (
+                            <Button
+                              type="primary"
+                              icon={<PlusOutlined />}
+                              onClick={openCreateCustomProviderModal}
+                              className="provider-switcher__add-button"
+                            >
+                              {t("添加自定义 Provider")}
+                            </Button>
+                          ) : null}
                           <Input
                             allowClear
                             value={providerSearch}
@@ -1992,11 +2141,40 @@ export const SettingsPage = () => {
                           <ScrollArea className="provider-switcher__content-scroll">
                             <div className="provider-switcher__content">
                         {isCustomApiProvider ? (
-                          <Typography.Paragraph className="!text-slate-600">
-                            {t(
-                              "Custom API 用于接入兼容 OpenAI、Anthropic 或其他受支持协议的服务。API Key 可选；是否填写取决于你的服务是否要求鉴权。",
-                            )}
-                          </Typography.Paragraph>
+                          <div className="custom-provider-summary">
+                            <div className="custom-provider-summary__header">
+                              <div className="min-w-0 flex-1">
+                                <Typography.Text
+                                  strong
+                                  className="custom-provider-summary__title"
+                                >
+                                  {selectedProviderName}
+                                </Typography.Text>
+                                <Typography.Paragraph className="!mb-0 !mt-1 !text-slate-600">
+                                  {t("使用名称区分不同的自定义服务。")}
+                                </Typography.Paragraph>
+                              </div>
+                              <Button onClick={openEditCustomProviderModal}>
+                                {t("编辑 Provider")}
+                              </Button>
+                            </div>
+                            <div className="custom-provider-summary__meta">
+                              <div className="custom-provider-summary__meta-item">
+                                <span>{t("自定义 URL")}</span>
+                                <strong>{baseUrlText || "--"}</strong>
+                              </div>
+                              <div className="custom-provider-summary__meta-item">
+                                <span>{t("自定义模型 API 类型")}</span>
+                                <strong>{apiText || "--"}</strong>
+                              </div>
+                              <div className="custom-provider-summary__meta-item">
+                                <span>API Key</span>
+                                <strong>
+                                  {tokenFilled ? t("已配置") : t("未配置")}
+                                </strong>
+                              </div>
+                            </div>
+                          </div>
                         ) : null}
 
                         {!isCustomApiProvider ? (
@@ -2009,135 +2187,48 @@ export const SettingsPage = () => {
                         ) : null}
 
                         {isCustomApiProvider ? (
-                          <>
-                            <Form.Item
-                              name="baseUrl"
-                              label={getFieldLabel(
-                                "自定义 URL",
-                                Boolean(baseUrlText),
-                              )}
-                              extra={t(
-                                "填写 API 根地址，不要包含 /chat/completions、/responses、/messages 等具体接口路径。",
-                              )}
-                              rules={[
-                                {
-                                  validator: async (_, value) => {
-                                    const trimmed = String(value ?? "").trim();
-                                    if (!trimmed) {
-                                      return Promise.resolve();
-                                    }
-                                    try {
-                                      const parsed = new URL(trimmed);
-                                      if (
-                                        parsed.protocol === "http:" ||
-                                        parsed.protocol === "https:"
-                                      ) {
-                                        return Promise.resolve();
-                                      }
-                                    } catch {
-                                      // handled below
-                                    }
-                                    return Promise.reject(
-                                      new Error(
-                                        t("URL 必须是合法的 http/https 地址"),
-                                      ),
-                                    );
-                                  },
-                                },
-                              ]}
-                            >
-                              <Input placeholder="https://api.example.com/v1" />
-                            </Form.Item>
-
-                            <Form.Item
-                              name="api"
-                              label={getFieldLabel(
-                                "自定义模型 API 类型",
-                                Boolean(apiText),
-                              )}
-                              extra={t(
-                                "选择你的服务实际兼容的协议类型；大多数 OpenAI 兼容服务应选择 openai-completions。",
-                              )}
-                              rules={[
-                                {
-                                  validator: async (_, value) => {
-                                    const customModels =
-                                      normalizeCustomModelFormValues(
-                                        (claudeForm.getFieldValue(
-                                          "customModels",
-                                        ) as
-                                          | CustomModelFormValue[]
-                                          | undefined) ?? [],
+                          <Form.Item name="secret" hidden>
+                            <Input />
+                          </Form.Item>
+                        ) : (
+                          <Form.Item
+                            name="secret"
+                            label={getFieldLabel(
+                              providerMeta.keyLabel,
+                              tokenFilled,
+                            )}
+                            rules={[
+                              {
+                                validator: async (_, value) => {
+                                  const enabled =
+                                    claudeForm.getFieldValue("enabled");
+                                  if (
+                                    enabled &&
+                                    !isCustomApiProvider &&
+                                    !String(value ?? "").trim()
+                                  ) {
+                                      return Promise.reject(
+                                        new Error(
+                                          t("启用 Provider 时必须设置 API Key"),
+                                        ),
                                       );
-                                    const trimmed = String(value ?? "").trim();
-                                    if (customModels.length === 0 || trimmed) {
-                                      return Promise.resolve();
-                                    }
+                                  }
+                                  const trimmed = String(value ?? "").trim();
+                                  if (trimmed && trimmed.length < 10) {
                                     return Promise.reject(
-                                      new Error(
-                                        t("配置自定义模型时必须选择 API 类型"),
-                                      ),
+                                      new Error(t("凭证长度至少 10 位")),
                                     );
-                                  },
+                                  }
+                                  return Promise.resolve();
                                 },
-                              ]}
-                            >
-                              <Select
-                                allowClear
-                                placeholder="请选择"
-                                options={CUSTOM_MODEL_API_OPTIONS.map((value) => ({
-                                  label: value,
-                                  value,
-                                }))}
-                              />
-                            </Form.Item>
-                          </>
-                        ) : null}
-
-                        <Form.Item
-                          name="secret"
-                          label={getFieldLabel(
-                            providerMeta.keyLabel,
-                            tokenFilled,
-                          )}
-                          extra={
-                            isCustomApiProvider
-                              ? t(
-                                  "Custom API 的 API Key 为可选项；如果你的服务不要求 Bearer Token，可以留空。",
-                                )
-                              : undefined
-                          }
-                          rules={[
-                            {
-                              validator: async (_, value) => {
-                                const enabled =
-                                  claudeForm.getFieldValue("enabled");
-                                if (
-                                  enabled &&
-                                  !isCustomApiProvider &&
-                                  !String(value ?? "").trim()
-                                ) {
-                                    return Promise.reject(
-                                      new Error(
-                                        t("启用 Provider 时必须设置 API Key"),
-                                      ),
-                                    );
-                                }
-                                const trimmed = String(value ?? "").trim();
-                                if (trimmed && trimmed.length < 10) {
-                                  return Promise.reject(
-                                    new Error(t("凭证长度至少 10 位")),
-                                  );
-                                }
-                                return Promise.resolve();
                               },
-                            },
-                          ]}
-                        >
-                          <Input.Password
-                            placeholder={providerMeta.keyPlaceholder}
-                          />
-                        </Form.Item>
+                            ]}
+                          >
+                            <Input.Password
+                              placeholder={providerMeta.keyPlaceholder}
+                            />
+                          </Form.Item>
+                        )}
 
                         {isCustomApiProvider ? (
                           <>
@@ -2156,7 +2247,7 @@ export const SettingsPage = () => {
                                     customModelsFilled,
                                   )}
                                   extra={t(
-                                    "这里定义 Custom API 可用的模型。新增后会出现在下方的启用模型列表中。",
+                                    "这里定义当前自定义 Provider 可用的模型。新增后会出现在下方的启用模型列表中。",
                                   )}
                                   className="[&_.ant-form-item-label>label]:after:!content-none"
                                 >
@@ -3087,6 +3178,146 @@ export const SettingsPage = () => {
             },
           ]}
         />
+        <Modal
+          open={customProviderModalOpen}
+          title={t(
+            editingCustomProviderId
+              ? "编辑自定义 Provider"
+              : "添加自定义 Provider",
+          )}
+          onCancel={closeCustomProviderModal}
+          onOk={() => {
+            void handleSubmitCustomProvider();
+          }}
+          confirmLoading={saveClaudeMutation.isPending}
+          okText={t(editingCustomProviderId ? "保存修改" : "保存并添加")}
+          cancelText={t("关闭")}
+          destroyOnHidden
+        >
+          <Form
+            form={customProviderForm}
+            layout="vertical"
+            initialValues={{
+              displayName: "",
+              secret: "",
+              baseUrl: "",
+              api: undefined,
+            }}
+          >
+            <Form.Item
+              name="displayName"
+              label={t("Provider 名称")}
+              extra={t("使用名称区分不同的自定义服务。")}
+              rules={[
+                {
+                  required: true,
+                  message: t("请输入 Provider 名称"),
+                },
+                {
+                  validator: async (_, value) => {
+                    const trimmed = String(value ?? "").trim().toLowerCase();
+                    if (!trimmed) return Promise.resolve();
+                    const duplicated = (availableProvidersQuery.data ?? []).some(
+                      (item) =>
+                        item.id !== editingCustomProviderId &&
+                        isCustomApiProviderId(item.id) &&
+                        item.name.trim().toLowerCase() === trimmed,
+                    );
+                    if (!duplicated) return Promise.resolve();
+                    return Promise.reject(
+                      new Error(t("Provider 名称不能重复")),
+                    );
+                  },
+                },
+              ]}
+            >
+              <Input placeholder={t("请输入 Provider 名称")} />
+            </Form.Item>
+
+            <Form.Item
+              name="baseUrl"
+              label={t("自定义 URL")}
+              extra={t(
+                "填写 API 根地址，不要包含 /chat/completions、/responses、/messages 等具体接口路径。",
+              )}
+              rules={[
+                {
+                  required: true,
+                  message: t("请填写 Provider URL"),
+                },
+                {
+                  validator: async (_, value) => {
+                    const trimmed = String(value ?? "").trim();
+                    if (!trimmed) {
+                      return Promise.resolve();
+                    }
+                    try {
+                      const parsed = new URL(trimmed);
+                      if (
+                        parsed.protocol === "http:" ||
+                        parsed.protocol === "https:"
+                      ) {
+                        return Promise.resolve();
+                      }
+                    } catch {
+                      // handled below
+                    }
+                    return Promise.reject(
+                      new Error(t("URL 必须是合法的 http/https 地址")),
+                    );
+                  },
+                },
+              ]}
+            >
+              <Input placeholder="https://api.example.com/v1" />
+            </Form.Item>
+
+            <Form.Item
+              name="api"
+              label={t("自定义模型 API 类型")}
+              extra={t(
+                "选择你的服务实际兼容的协议类型；大多数 OpenAI 兼容服务应选择 openai-completions。",
+              )}
+              rules={[
+                {
+                  required: true,
+                  message: t("请选择 API 类型"),
+                },
+              ]}
+            >
+              <Select
+                placeholder={t("请选择")}
+                options={CUSTOM_MODEL_API_OPTIONS.map((value) => ({
+                  label: value,
+                  value,
+                }))}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="secret"
+              label="API Key"
+              extra={t(
+                "API Key 为可选项；如果你的服务不要求 Bearer Token，可以留空。",
+              )}
+              rules={[
+                {
+                  validator: async (_, value) => {
+                    const trimmed = String(value ?? "").trim();
+                    if (trimmed && trimmed.length < 10) {
+                      return Promise.reject(
+                        new Error(t("凭证长度至少 10 位")),
+                      );
+                    }
+                    return Promise.resolve();
+                  },
+                },
+              ]}
+            >
+              <Input.Password placeholder="sk-..." />
+            </Form.Item>
+          </Form>
+        </Modal>
       </div>
     </div>
   );

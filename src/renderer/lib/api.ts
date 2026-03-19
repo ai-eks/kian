@@ -190,6 +190,7 @@ export const api = {
       unwrap(await window.api.settings.saveShortcutConfig(payload)),
     saveClaudeApiKey: async (payload: {
       provider: string;
+      displayName?: string;
       enabled: boolean;
       secret?: string;
       baseUrl?: string;
