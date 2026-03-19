@@ -5,7 +5,7 @@ import { logger } from "./logger";
 import { updateEvents } from "./updateEvents";
 import { compareVersions, normalizeVersion } from "./updateVersion";
 
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const INITIAL_CHECK_DELAY_MS = 15 * 1000;
 
 interface CheckOptions {

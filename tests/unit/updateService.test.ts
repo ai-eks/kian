@@ -206,7 +206,7 @@ describe('updateService', () => {
     await vi.advanceTimersByTimeAsync(15_000);
     expect(state.checkForUpdates).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
     expect(state.checkForUpdates).toHaveBeenCalledTimes(2);
 
     updateService.stop();
