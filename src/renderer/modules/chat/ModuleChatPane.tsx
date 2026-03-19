@@ -1,5 +1,6 @@
 import {
   ArrowUpOutlined,
+  CaretDownFilled,
   CheckCircleOutlined,
   FileOutlined,
   FolderOpenOutlined,
@@ -682,11 +683,13 @@ const FileReferenceCard = ({
             <FolderOpenOutlined />在 Finder 中查看
           </button>
         </div>
-        <pre className="chat-file-preview__content">
-          {loadingPreview
-            ? "正在加载文本预览..."
-            : previewError || previewText || "文件为空"}
-        </pre>
+        <ScrollArea className="chat-file-preview__scroll">
+          <pre className="chat-file-preview__content">
+            {loadingPreview
+              ? "正在加载文本预览..."
+              : previewError || previewText || "文件为空"}
+          </pre>
+        </ScrollArea>
       </div>
     );
   }
@@ -898,36 +901,36 @@ const ToolCallStep = memo(({ info }: { info: ToolCallInfo }) => {
     };
   }, [info.output]);
 
+  const header = (
+    <>
+      <span className="flex h-3 w-3 flex-shrink-0 items-center justify-center leading-none">
+        {isDone ? (
+          <>
+            <CheckCircleOutlined className="text-[11px] text-green-500 group-open:hidden" />
+            <CaretDownFilled className="hidden text-[11px] text-green-500 group-open:block" />
+          </>
+        ) : (
+          <LoadingOutlined className="text-[11px] text-blue-500" />
+        )}
+      </span>
+      <span className="text-[11px] font-medium leading-none text-slate-700">
+        {info.toolName}
+      </span>
+    </>
+  );
+
   if (!hasDetails) {
     return (
       <div className="inline-flex items-center gap-1.5">
-        <span className="flex h-3 w-3 flex-shrink-0 items-center justify-center leading-none">
-          {isDone ? (
-            <CheckCircleOutlined className="text-[11px] text-green-500" />
-          ) : (
-            <LoadingOutlined className="text-[11px] text-blue-500" />
-          )}
-        </span>
-        <span className="text-[11px] font-medium leading-none text-slate-700">
-          {info.toolName}
-        </span>
+        {header}
       </div>
     );
   }
 
   return (
-    <details className="w-full">
+    <details className="group w-full">
       <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
-        <span className="flex h-3 w-3 flex-shrink-0 items-center justify-center leading-none">
-          {isDone ? (
-            <CheckCircleOutlined className="text-[11px] text-green-500" />
-          ) : (
-            <LoadingOutlined className="text-[11px] text-blue-500" />
-          )}
-        </span>
-        <span className="text-[11px] font-medium leading-none text-slate-700">
-          {info.toolName}
-        </span>
+        {header}
       </summary>
       <div className="mt-2 w-full space-y-2 border-l-2 border-[#dbe5f5] pl-2">
         {info.toolInput?.trim() ? (
@@ -1177,22 +1180,27 @@ const ThinkingMessageCard = memo(
     active?: boolean;
   }) => (
     <details className="group w-full">
-      <summary className="list-none [&::-webkit-details-marker]:hidden">
-        <Tag
-          key={`${active ? "active" : "idle"}-${title}`}
-          className="i18n-no-translate !m-0 inline-flex cursor-pointer items-center gap-1 rounded-full border-[#e5d7ae] bg-[#fff7df] px-2 py-0.5 text-[11px] font-medium text-[#8a6b17]"
-        >
-          {active ? <LoadingOutlined className="text-[10px]" spin /> : null}
-          <span>{title}</span>
-          <ArrowUpOutlined className="text-[10px] transition-transform group-open:rotate-0 rotate-180" />
-        </Tag>
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+        <span className="flex h-3 w-3 flex-shrink-0 items-center justify-center leading-none">
+          {active ? (
+            <LoadingOutlined className="text-[11px] text-[#d1a420]" spin />
+          ) : (
+            <>
+              <CheckCircleOutlined className="text-[11px] text-[#d1a420] group-open:hidden" />
+              <CaretDownFilled className="hidden text-[11px] text-[#d1a420] group-open:block" />
+            </>
+          )}
+        </span>
+        <span className="text-[11px] font-medium leading-none text-[#8a6b17]">
+          {title}
+        </span>
       </summary>
-      <div className="pt-2">
+      <div className="mt-2">
         <MarkdownMessage
           content={formatThinkingQuoteMarkdown(content)}
           projectId={projectId}
           user={false}
-          className="[&_blockquote]:my-0 [&_blockquote]:border-l-[3px] [&_blockquote]:border-[#e5d7ae] [&_blockquote]:bg-[#fffcf4] [&_blockquote]:py-1 [&_blockquote]:pl-3 [&_blockquote]:pr-0 [&_blockquote]:text-slate-500 [&_blockquote_p]:text-[12px] [&_blockquote_p]:italic [&_blockquote_p]:leading-5"
+          className="[&_blockquote]:my-0 [&_blockquote]:border-l-[3px] [&_blockquote]:border-[#e5d7ae] [&_blockquote]:pl-3 [&_blockquote]:text-slate-500 [&_blockquote_p]:text-[11px] [&_blockquote_p]:leading-5 [&_blockquote_p]:italic"
         />
       </div>
     </details>
@@ -1321,6 +1329,11 @@ const ChatTimeline = memo(
 
     const shouldShowWorkingIndicator = showWorkingIndicator;
     const shouldShowStreamingThinkingState = streamingThinkingActive;
+    const activeStreamingThinkingKey = shouldShowStreamingThinkingState
+      ? [...timelineBlocks]
+          .reverse()
+          .find((block) => block.type === "streaming-thinking")?.key
+      : undefined;
 
     return (
       <div className="flex flex-col gap-3">
@@ -1352,11 +1365,11 @@ const ChatTimeline = memo(
                   content={block.content}
                   projectId={projectId}
                   title={
-                    shouldShowStreamingThinkingState
+                    activeStreamingThinkingKey === block.key
                       ? streamingThinkingTitle
                       : thinkingMessageTitle
                   }
-                  active={shouldShowStreamingThinkingState}
+                  active={activeStreamingThinkingKey === block.key}
                 />
               </div>
             );
@@ -2524,7 +2537,12 @@ export const ModuleChatPane = ({
       sendMutation.variables?.sessionId === currentSessionId) ||
     streamingInProgress ||
     hasPendingAssistantReply;
-  const showWorkingIndicator = showStreamingPanel && !streamingThinkingActive;
+  const showWorkingIndicator =
+    ((sendMutation.isPending &&
+      sendMutation.variables?.sessionId === currentSessionId) ||
+      streamingInProgress ||
+      Boolean(activeRequestId)) &&
+    !streamingThinkingActive;
   const isAutoLayout = layoutMode === "auto";
   const rootClassName = isAutoLayout
     ? "flex min-h-0 justify-center"

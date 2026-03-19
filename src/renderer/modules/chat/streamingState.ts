@@ -87,10 +87,7 @@ const appendStreamingTextDelta = (
   kind: "assistant" | "thinking",
 ): StreamingBlock[] => {
   if (!delta) return blocks;
-  const targetIndex =
-    kind === "thinking"
-      ? findLastBlockIndexByKind(blocks, kind)
-      : blocks.length - 1;
+  const targetIndex = blocks.length - 1;
   const target =
     targetIndex >= 0 && targetIndex < blocks.length ? blocks[targetIndex] : undefined;
 

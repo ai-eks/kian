@@ -7,10 +7,10 @@ import {
   type StreamingBlock,
 } from "../../src/renderer/modules/chat/streamingState";
 
-describe("streamingState thinking merge", () => {
+describe("streamingState thinking blocks", () => {
   const createKey = (prefix: string): string => `${prefix}-1`;
 
-  it("merges thinking deltas into a single block even when assistant text is interleaved", () => {
+  it("keeps interleaved thinking deltas in separate blocks", () => {
     let blocks: StreamingBlock[] = [];
 
     blocks = appendStreamingThinkingDelta(
@@ -32,14 +32,18 @@ describe("streamingState thinking merge", () => {
       createKey,
     );
 
-    expect(blocks).toHaveLength(2);
+    expect(blocks).toHaveLength(3);
     expect(blocks[0]).toMatchObject({
       kind: "thinking",
-      content: "first thought second thought",
+      content: "first thought",
     });
     expect(blocks[1]).toMatchObject({
       kind: "assistant",
       content: "answer",
+    });
+    expect(blocks[2]).toMatchObject({
+      kind: "thinking",
+      content: " second thought",
     });
   });
 

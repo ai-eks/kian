@@ -185,10 +185,7 @@ const appendTextDelta = (
   type: "assistant" | "thinking",
 ): void => {
   if (!delta) return;
-  const targetIndex =
-    type === "thinking"
-      ? findLastTimelineStepIndex(timeline, type)
-      : timeline.length - 1;
+  const targetIndex = timeline.length - 1;
   const target =
     targetIndex >= 0 && targetIndex < timeline.length
       ? timeline[targetIndex]

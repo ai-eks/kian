@@ -122,7 +122,7 @@ describe("chatService timeline persistence", () => {
     });
   });
 
-  it("persists interleaved thinking deltas as a single thinking message", async () => {
+  it("persists interleaved thinking deltas as separate thinking messages", async () => {
     state.appendMessage.mockReset().mockResolvedValue(undefined);
     state.agentSend.mockReset().mockImplementation(async (_payload, onStream) => {
       onStream?.({
@@ -186,10 +186,14 @@ describe("chatService timeline persistence", () => {
           message.metadataJson === JSON.stringify({ kind: "thinking" }),
       );
 
-    expect(thinkingMessages).toHaveLength(1);
+    expect(thinkingMessages).toHaveLength(2);
     expect(thinkingMessages[0]).toMatchObject({
-      content: "第一段思考第二段思考",
+      content: "第一段思考",
       createdAt: "2026-03-10T00:00:00.500Z",
+    });
+    expect(thinkingMessages[1]).toMatchObject({
+      content: "第二段思考",
+      createdAt: "2026-03-10T00:00:01.500Z",
     });
   });
 });
