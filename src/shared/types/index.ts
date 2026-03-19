@@ -15,6 +15,7 @@ export type AppUpdateStage =
   | 'checking'
   | 'available'
   | 'downloading'
+  | 'verifying'
   | 'downloaded'
   | 'upToDate'
   | 'failed';

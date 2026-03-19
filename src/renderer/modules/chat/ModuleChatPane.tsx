@@ -956,9 +956,13 @@ const ToolCallStep = memo(({ info }: { info: ToolCallInfo }) => {
             <div className="mb-1 text-[11px] font-medium text-slate-500">
               输入参数
             </div>
-            <pre className="w-full overflow-x-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] leading-5 text-slate-700">
-              {info.toolInput}
-            </pre>
+            <div className="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+              <ScrollArea className="tool-call-detail-scroll w-full">
+                <pre className="w-full whitespace-pre-wrap px-2 py-1 font-mono text-[11px] leading-5 text-slate-700">
+                  {info.toolInput}
+                </pre>
+              </ScrollArea>
+            </div>
           </div>
         ) : null}
         {info.output?.trim() ? (
@@ -967,11 +971,13 @@ const ToolCallStep = memo(({ info }: { info: ToolCallInfo }) => {
               执行结果
             </div>
             {showAllOutput ? (
-              <ScrollArea className="max-h-72 w-full">
-                <pre className="w-full whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 px-2 py-1 pr-2 font-mono text-[11px] leading-5 text-slate-700">
-                  {outputPreview.fullText}
-                </pre>
-              </ScrollArea>
+              <div className="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                <ScrollArea className="tool-call-detail-scroll max-h-72 w-full">
+                  <pre className="w-full whitespace-pre-wrap px-2 py-1 pr-2 font-mono text-[11px] leading-5 text-slate-700">
+                    {outputPreview.fullText}
+                  </pre>
+                </ScrollArea>
+              </div>
             ) : (
               <pre className="w-full whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] leading-5 text-slate-700">
                 {outputPreview.previewText}

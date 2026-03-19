@@ -794,12 +794,19 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
       "Manage installed skills, control visibility for the Main Agent and sub agents, and uninstall skills you no longer need (built-in skills cannot be removed).",
     "内置仓库来自仓库目录 skills/repositories.json。你也可以添加自定义 GitHub 仓库。":
       "Built-in repositories come from skills/repositories.json. You can also add custom GitHub repositories.",
-    "可以试试让 Kian 来帮你修改或者创建文档":
-      "Try asking Kian to edit or create a document for you",
+  "可以试试让 Kian 来帮你修改或者创建文档":
+    "Try asking Kian to edit or create a document for you",
+  "从左侧选择 Provider，配置对应的 API Key 并启用模型。":
+    "Choose a provider from the left, configure the corresponding API key, and enable models.",
+  "从左侧选择 Provider，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。":
+    "Choose a provider from the left, configure the corresponding API key, and enable models. Custom API sits alongside OpenRouter and is used for Custom URL, custom API type, and model list settings.",
   "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。":
     "Switch Provider tabs to choose an integration, configure the corresponding API key, and enable models.",
   "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。":
     "Switch Provider tabs to choose an integration, configure the corresponding API key, and enable models. Custom API sits alongside OpenRouter and is used for Custom URL, custom API type, and model list settings.",
+  "搜索提供商...": "Search providers...",
+  "没有匹配的 Provider": "No matching providers",
+  "试试搜索名称或 Provider ID": "Try searching by name or provider ID",
   "Custom API 的 API Key 为可选项；如果你的服务不要求 Bearer Token，可以留空。":
     "API key is optional for Custom API. Leave it empty if your service does not require a Bearer token.",
   "Custom API 用于接入兼容 OpenAI、Anthropic 或其他受支持协议的服务。API Key 可选；是否填写取决于你的服务是否要求鉴权。":
@@ -1275,10 +1282,17 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "点击输入框后按下新的组合键即可录制，按":
       "입력 칸을 클릭한 뒤 새 조합 키를 누르면 녹화가 시작됩니다. ",
     "退出录制。": "를 눌러 녹화를 종료합니다.",
+    "从左侧选择 Provider，配置对应的 API Key 并启用模型。":
+      "왼쪽에서 Provider를 선택하고, 해당 API Key를 설정한 뒤 모델을 활성화하세요.",
+    "从左侧选择 Provider，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。":
+      "왼쪽에서 Provider를 선택하고, 해당 API Key를 설정한 뒤 모델을 활성화하세요. Custom API는 OpenRouter와 같은 레벨의 별도 Provider이며, Custom URL, 사용자 지정 API 유형, 모델 목록 설정에 사용됩니다.",
     "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。":
       "Provider 탭을 전환해 연동 방식을 선택하고, 해당 API Key를 설정한 뒤 모델을 활성화하세요.",
     "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。":
       "Provider 탭을 전환해 연동 방식을 선택하고, 해당 API Key를 설정한 뒤 모델을 활성화하세요. Custom API는 OpenRouter와 같은 레벨의 별도 Provider이며, Custom URL, 사용자 지정 API 유형, 모델 목록 설정에 사용됩니다.",
+    "搜索提供商...": "Provider 검색...",
+    "没有匹配的 Provider": "일치하는 Provider가 없습니다",
+    "试试搜索名称或 Provider ID": "이름 또는 Provider ID로 검색해 보세요",
     "Custom API 的 API Key 为可选项；如果你的服务不要求 Bearer Token，可以留空。":
       "Custom API의 API Key는 선택 사항입니다. 서비스에서 Bearer 토큰 인증을 요구하지 않으면 비워 둘 수 있습니다.",
     "Custom API 用于接入兼容 OpenAI、Anthropic 或其他受支持协议的服务。API Key 可选；是否填写取决于你的服务是否要求鉴权。":
@@ -1755,10 +1769,17 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "点击输入框后按下新的组合键即可录制，按":
       "入力欄をクリックして新しいキーの組み合わせを押すと録音が始まります。 ",
     "退出录制。": "を押して録音を終了します。",
+    "从左侧选择 Provider，配置对应的 API Key 并启用模型。":
+      "左側で Provider を選び、対応する API Key を設定してモデルを有効化してください。",
+    "从左侧选择 Provider，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。":
+      "左側で Provider を選び、対応する API Key を設定してモデルを有効化してください。Custom API は OpenRouter と同じ階層の独立 Provider で、Custom URL、カスタム API 種別、モデル一覧の設定に使います。",
     "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。":
       "Provider タブを切り替えて接続方法を選び、対応する API Key を設定してモデルを有効化してください。",
     "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。":
       "Provider タブを切り替えて接続方法を選び、対応する API Key を設定してモデルを有効化してください。Custom API は OpenRouter と同じ階層の独立 Provider で、Custom URL、カスタム API 種別、モデル一覧の設定に使います。",
+    "搜索提供商...": "Provider を検索...",
+    "没有匹配的 Provider": "一致する Provider がありません",
+    "试试搜索名称或 Provider ID": "名前または Provider ID で検索してください",
     "并启用模型。可选的 URL、自定义 API 类型和模型配置遵循 pi-mono 的 provider 覆盖方式：只填 URL 会重定向当前 Provider 的内置模型，配置自定义模型后则改为使用自定义模型列表。":
       "任意の URL、カスタム API 種別、モデル設定は pi-mono の provider override 方式に従います。URL のみを設定すると内蔵モデルはその URL に転送され、カスタムモデルを設定すると現在の Provider のモデル一覧がカスタム一覧に置き換わります。",
     "Provider": "Provider",

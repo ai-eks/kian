@@ -1,4 +1,4 @@
-import { CheckCircleOutlined, SearchOutlined } from "@ant-design/icons";
+import { SearchOutlined } from "@ant-design/icons";
 import type { MainLayoutOutletContext } from "@renderer/app/MainLayout";
 import { ScrollArea } from "@renderer/components/ScrollArea";
 import { useAppI18n } from "@renderer/i18n/AppI18nProvider";
@@ -684,6 +684,7 @@ export const SettingsPage = () => {
   });
 
   const [agentModelSearch, setAgentModelSearch] = useState("");
+  const [providerSearch, setProviderSearch] = useState("");
   const [providerModelSearch, setProviderModelSearch] = useState("");
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatusDTO | null>(
     null,
@@ -724,6 +725,7 @@ export const SettingsPage = () => {
     queryKey: ["settings", "model-provider", "fal"],
     queryFn: () => api.settings.getModelProviderStatus("fal"),
   });
+  const claudeProviderStatusMap = claudeStatusQuery.data?.providers;
   const telegramStatusQuery = useQuery({
     queryKey: ["settings", "chat-channel", "telegram"],
     queryFn: api.settings.getTelegramChatChannelStatus,
@@ -834,7 +836,7 @@ export const SettingsPage = () => {
 
   const sortedProviders = useMemo(() => {
     const providers = availableProvidersQuery.data ?? [];
-    const providerStatuses = claudeStatusQuery.data?.providers ?? {};
+    const providerStatuses = claudeProviderStatusMap ?? {};
     return [...providers].sort((a, b) => {
       const aActive =
         providerStatuses[a.id]?.enabled && providerStatuses[a.id]?.configured
@@ -846,7 +848,15 @@ export const SettingsPage = () => {
           : 0;
       return bActive - aActive;
     });
-  }, [availableProvidersQuery.data, claudeStatusQuery.data]);
+  }, [availableProvidersQuery.data, claudeProviderStatusMap]);
+
+  const filteredProviders = useMemo(() => {
+    const keyword = providerSearch.trim().toLowerCase();
+    if (!keyword) return sortedProviders;
+    return sortedProviders.filter(({ id, name }) =>
+      [id, name].some((value) => value.toLowerCase().includes(keyword)),
+    );
+  }, [providerSearch, sortedProviders]);
 
   const currentClaudeDraft = useMemo(
     () =>
@@ -871,6 +881,32 @@ export const SettingsPage = () => {
       providerEnabled,
       secretValue,
     ],
+  );
+
+  const handleClaudeProviderChange = useCallback(
+    (nextProvider: string) => {
+      if (!nextProvider) return;
+
+      if (provider.trim()) {
+        claudeProviderDraftsRef.current[provider] = currentClaudeDraft;
+      }
+      const nextValues =
+        claudeProviderDraftsRef.current[nextProvider] ??
+        getClaudeFormValuesFromProviderConfig(
+          nextProvider,
+          claudeProviderStatusMap?.[nextProvider],
+        );
+      claudeProviderDraftsRef.current[nextProvider] = normalizeClaudeDraftValues(
+        nextValues,
+        nextProvider,
+      );
+      claudeForm.setFieldsValue(claudeProviderDraftsRef.current[nextProvider]);
+      previousCustomModelIdsSignatureRef.current =
+        getCustomModelIdsSignatureFromClaudeValues(
+          claudeProviderDraftsRef.current[nextProvider],
+        );
+    },
+    [claudeForm, claudeProviderStatusMap, currentClaudeDraft, provider],
   );
 
   const syncClaudeProviderDraftFromStatus = useCallback(
@@ -1858,16 +1894,17 @@ export const SettingsPage = () => {
               key: "agent",
               label: "语言模型",
               children: (
-                <ScrollArea className="h-full">
-                  <div className="px-5 pb-5">
+                <div className="agent-settings-pane">
+                  <div className="agent-settings-pane__header">
                     <Typography.Title level={4} className="!text-slate-900">
                       语言模型
                     </Typography.Title>
                     <Typography.Paragraph className="!text-slate-600">
-                        {t(
-                        "选择 Provider 标签页来切换接入方式，配置对应的 API Key 并启用模型。Custom API 与 OpenRouter 平级，用于配置 Custom URL、自定义 API 类型和模型列表。",
+                      {t(
+                        "从左侧选择 Provider，配置对应的 API Key 并启用模型。",
                       )}
                     </Typography.Paragraph>
+                  </div>
 
                     <Form
                       form={claudeForm}
@@ -1878,60 +1915,82 @@ export const SettingsPage = () => {
                         customModels: [],
                         enabledModels: [],
                       }}
+                      className="agent-settings-pane__form"
                     >
                       <Form.Item name="provider" hidden>
                         <Input />
                       </Form.Item>
 
-                      <Tabs
-                        activeKey={provider}
-                        onChange={(nextProvider) => {
-                          if (provider.trim()) {
-                            claudeProviderDraftsRef.current[provider] =
-                              currentClaudeDraft;
-                          }
-                          const nextValues =
-                            claudeProviderDraftsRef.current[nextProvider] ??
-                            getClaudeFormValuesFromProviderConfig(
-                              nextProvider,
-                              claudeStatusQuery.data?.providers[nextProvider],
-                            );
-                          claudeProviderDraftsRef.current[nextProvider] =
-                            normalizeClaudeDraftValues(
-                              nextValues,
-                              nextProvider,
-                            );
-                          claudeForm.setFieldsValue(
-                            claudeProviderDraftsRef.current[nextProvider],
-                          );
-                          previousCustomModelIdsSignatureRef.current =
-                            getCustomModelIdsSignatureFromClaudeValues(
-                              claudeProviderDraftsRef.current[nextProvider],
-                            );
-                        }}
-                        destroyInactiveTabPane={false}
-                        animated={false}
-                        items={sortedProviders.map((p) => {
-                          const pConfig =
-                            claudeStatusQuery.data?.providers[p.id];
-                          const active =
-                            pConfig?.enabled && pConfig?.configured;
-                          return {
-                            key: p.id,
-                            label: active ? (
-                              <span>
-                                <CheckCircleOutlined className="mr-1 text-green-500" />
-                                {p.name}
-                              </span>
-                            ) : (
-                              p.name
-                            ),
-                            children: null,
-                          };
-                        })}
-                      />
+                      <div className="provider-switcher">
+                        <div className="provider-switcher__sidebar">
+                          <Input
+                            allowClear
+                            value={providerSearch}
+                            onChange={(event) =>
+                              setProviderSearch(event.target.value)
+                            }
+                            prefix={<SearchOutlined />}
+                            placeholder={t("搜索提供商...")}
+                            className="provider-switcher__search"
+                          />
+                          <ScrollArea className="provider-switcher__list">
+                            <div className="provider-switcher__list-inner">
+                              {filteredProviders.length > 0 ? (
+                                filteredProviders.map((providerEntry) => {
+                                  const providerConfig =
+                                    claudeProviderStatusMap?.[
+                                      providerEntry.id
+                                    ];
+                                  const active = Boolean(
+                                    providerConfig?.enabled &&
+                                      providerConfig?.configured,
+                                  );
+                                  const selected =
+                                    provider === providerEntry.id;
 
-                      <div className="mt-2">
+                                  return (
+                                    <button
+                                      key={providerEntry.id}
+                                      type="button"
+                                      aria-pressed={selected}
+                                      className={`provider-switcher__item${
+                                        selected ? " is-selected" : ""
+                                      }${active ? " is-active" : ""}`}
+                                      onClick={() =>
+                                        handleClaudeProviderChange(
+                                          providerEntry.id,
+                                        )
+                                      }
+                                    >
+                                      <span className="provider-switcher__item-name">
+                                        {providerEntry.name}
+                                      </span>
+                                      <span
+                                        aria-hidden="true"
+                                        className={`provider-switcher__status${
+                                          active ? " is-active" : ""
+                                        }`}
+                                      />
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                <div className="provider-switcher__empty">
+                                  <Typography.Text className="provider-switcher__empty-title">
+                                    {t("没有匹配的 Provider")}
+                                  </Typography.Text>
+                                  <Typography.Text className="provider-switcher__empty-hint">
+                                    {t("试试搜索名称或 Provider ID")}
+                                  </Typography.Text>
+                                </div>
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </div>
+
+                        <div className="provider-switcher__content-shell">
+                          <ScrollArea className="provider-switcher__content-scroll">
+                            <div className="provider-switcher__content">
                         {isCustomApiProvider ? (
                           <Typography.Paragraph className="!text-slate-600">
                             {t(
@@ -2252,7 +2311,7 @@ export const SettingsPage = () => {
                               />
                             </div>
                           }
-                          className="[&_.ant-form-item-label]:!w-full [&_.ant-form-item-label>label]:!w-full [&_.ant-form-item-label>label]:after:!content-none"
+                          className="model-search-form-item [&_.ant-form-item-label]:!w-full [&_.ant-form-item-label>label]:!w-full [&_.ant-form-item-label>label]:after:!content-none"
                         >
                           <ModelSwitchGrid
                             search={agentModelSearch}
@@ -2266,14 +2325,16 @@ export const SettingsPage = () => {
                             empty={
                               availableModelsQuery.isLoading
                                 ? "加载中..."
-                                : "暂无可用模型"
+                              : "暂无可用模型"
                             }
                           />
                         </Form.Item>
+                            </div>
+                          </ScrollArea>
+                        </div>
                       </div>
                     </Form>
                   </div>
-                </ScrollArea>
               ),
             },
             {
@@ -2347,7 +2408,7 @@ export const SettingsPage = () => {
                             />
                           </div>
                         }
-                        className="[&_.ant-form-item-label]:!w-full [&_.ant-form-item-label>label]:!w-full [&_.ant-form-item-label>label]:after:!content-none"
+                        className="model-search-form-item [&_.ant-form-item-label]:!w-full [&_.ant-form-item-label>label]:!w-full [&_.ant-form-item-label>label]:after:!content-none"
                         rules={[
                           {
                             validator: async (_, value) => {
