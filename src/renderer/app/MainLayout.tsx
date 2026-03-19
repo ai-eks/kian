@@ -38,6 +38,7 @@ import { useAppI18n } from '@renderer/i18n/AppI18nProvider';
 import { translateUiText } from '@renderer/i18n/uiTranslations';
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { DEFAULT_SHORTCUT_CONFIG } from '@shared/utils/shortcuts';
+import { resolveStartupDefaultRouteGate } from './startupDefaultRoute';
 
 const { Sider, Header, Content } = Layout;
 const GUIDE_SEEN_STORAGE_KEY = 'kian.guide.seen.v1';
@@ -61,7 +62,7 @@ export const MainLayout = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
-  const hasHandledStartupDefaultRoute = useRef(false);
+  const startupDefaultRoutePendingRef = useRef(location.pathname === '/');
   const pendingMainAgentInputFocusRef = useRef(false);
   const pendingMainAgentSessionCreationRef = useRef(false);
   const agentProjectMatch = useMatch('/agent/:projectId');
@@ -322,11 +323,14 @@ export const MainLayout = () => {
   }, [isMainAgentPage]);
 
   useEffect(() => {
-    if (hasHandledStartupDefaultRoute.current) return;
-    if (location.pathname !== '/') return;
-    if (!generalConfigQuery.data) return;
+    const startupRouteDecision = resolveStartupDefaultRouteGate({
+      pending: startupDefaultRoutePendingRef.current,
+      pathname: location.pathname,
+      hasGeneralConfig: Boolean(generalConfigQuery.data)
+    });
+    startupDefaultRoutePendingRef.current = startupRouteDecision.nextPending;
+    if (!startupRouteDecision.shouldHandle || !generalConfigQuery.data) return;
 
-    hasHandledStartupDefaultRoute.current = true;
     let cancelled = false;
 
     const handleStartupDefaultRoute = async (): Promise<void> => {
