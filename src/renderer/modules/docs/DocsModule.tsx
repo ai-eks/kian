@@ -23,6 +23,10 @@ import { useAppI18n } from "@renderer/i18n/AppI18nProvider";
 import { translateUiText } from "@renderer/i18n/uiTranslations";
 import { ScrollArea } from "@renderer/components/ScrollArea";
 import { api } from "@renderer/lib/api";
+import {
+  isStaleDocSaveResponse,
+  shouldSyncDocEditorFromRemote,
+} from "@shared/utils/docAutosave";
 import type { DocExplorerEntryDTO, DocumentDTO } from "@shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Typography, message, type MenuProps } from "antd";
@@ -439,6 +443,17 @@ export const DocsModule = ({
   type SidebarTab = "files" | "conversations";
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("files");
   const hasInitializedExpansionRef = useRef(false);
+  const editorValueRef = useRef(editorValue);
+  const activeDocIdRef = useRef<string | null>(null);
+  const lastRemoteSnapshotRef = useRef<{
+    docId: string | null;
+    content: string;
+  }>({
+    docId: null,
+    content: "",
+  });
+  const nextSaveRequestSeqRef = useRef(0);
+  const latestSaveRequestSeqByDocRef = useRef<Map<string, number>>(new Map());
 
   const docsQuery = useQuery({
     queryKey: ["docs", projectId],
@@ -590,11 +605,37 @@ export const DocsModule = ({
   }, [allDirectoryPaths, rootDirectoryPaths, activeDirectoryPaths]);
 
   useEffect(() => {
+    editorValueRef.current = editorValue;
+  }, [editorValue]);
+
+  useEffect(() => {
+    activeDocIdRef.current = activeDoc?.id ?? null;
+  }, [activeDoc?.id]);
+
+  useEffect(() => {
     if (!activeDoc) {
+      lastRemoteSnapshotRef.current = {
+        docId: null,
+        content: "",
+      };
       setEditorValue("");
       return;
     }
-    setEditorValue(activeDoc.content);
+
+    const nextSnapshot = {
+      docId: activeDoc.id,
+      content: activeDoc.content,
+    };
+    const shouldSync = shouldSyncDocEditorFromRemote({
+      previousSnapshot: lastRemoteSnapshotRef.current,
+      nextSnapshot,
+      editorValue: editorValueRef.current,
+    });
+
+    lastRemoteSnapshotRef.current = nextSnapshot;
+    if (shouldSync) {
+      setEditorValue(activeDoc.content);
+    }
   }, [activeDoc?.id, activeDoc?.content]);
 
   useEffect(() => {
@@ -825,34 +866,65 @@ export const DocsModule = ({
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { id: string; content: string }) =>
+    mutationFn: (payload: { id: string; content: string; requestSeq: number }) =>
       api.docs.update({ projectId, id: payload.id, content: payload.content }),
-    onSuccess: (updated) => {
-      setSaveState("saved");
+    onSuccess: (updated, variables) => {
+      const latestRequestSeq = latestSaveRequestSeqByDocRef.current.get(
+        variables.id,
+      );
+      if (isStaleDocSaveResponse(variables.requestSeq, latestRequestSeq)) {
+        return;
+      }
+
       queryClient.setQueryData<DocumentDTO[]>(["docs", projectId], (previous) =>
         [updated, ...((previous ?? []).filter((item) => item.id !== updated.id))],
       );
+      if (
+        activeDocIdRef.current === updated.id &&
+        editorValueRef.current === variables.content
+      ) {
+        setSaveState("saved");
+      }
     },
-    onError: (error) => {
-      setSaveState("error");
+    onError: (error, variables) => {
+      const latestRequestSeq = latestSaveRequestSeqByDocRef.current.get(
+        variables.id,
+      );
+      if (isStaleDocSaveResponse(variables.requestSeq, latestRequestSeq)) {
+        return;
+      }
+
+      if (activeDocIdRef.current === variables.id) {
+        setSaveState("error");
+      }
       message.error(error instanceof Error ? error.message : t("自动保存失败"));
     },
   });
 
   useEffect(() => {
-    if (!activeDoc) return;
+    if (!activeDoc) {
+      setSaveState("saved");
+      return;
+    }
     if (editorValue === activeDoc.content) {
       setSaveState("saved");
       return;
     }
 
     setSaveState("saving");
+    const requestSeq = nextSaveRequestSeqRef.current + 1;
+    nextSaveRequestSeqRef.current = requestSeq;
+    latestSaveRequestSeqByDocRef.current.set(activeDoc.id, requestSeq);
     const timer = setTimeout(() => {
-      updateMutation.mutate({ id: activeDoc.id, content: editorValue });
+      updateMutation.mutate({
+        id: activeDoc.id,
+        content: editorValue,
+        requestSeq,
+      });
     }, 700);
 
     return () => clearTimeout(timer);
-  }, [activeDoc, editorValue]);
+  }, [activeDoc, editorValue, updateMutation]);
 
   const toggleDirectory = (directoryPath: string): void => {
     setExpandedDirectories((previous) => {
