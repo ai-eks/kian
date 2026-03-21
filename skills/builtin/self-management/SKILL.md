@@ -1,6 +1,6 @@
 ---
 name: self-management
-description: Manage and update the current Kian app configuration, including global app preferences and workspace settings such as model providers, shortcuts, chat channels, MCP servers, and related runtime behavior. Use when the user wants to change how Kian itself works rather than editing a project.
+description: Manage Kian's own configuration and runtime behavior, including app preferences, workspace settings, models and providers, shortcuts, chat channels, and MCP servers. Use this when changing Kian itself rather than project files.
 ---
 
 # Self Management
