@@ -28,7 +28,8 @@ Use this skill when the task is to change Kian itself: app preferences, workspac
 3. Preserve unrelated keys, secrets, ids, and timestamps unless the user explicitly asked to rotate or remove them.
 4. Keep JSON valid: no comments, no trailing commas, no partially written structures.
 5. Re-read the edited file and verify the requested value is present in a supported format.
-6. If `workspaceRoot` changed, tell the user a restart is usually required because many services resolve the workspace path at startup.
+6. After changing persisted settings, call the `ReloadSettings` app-operation tool so shortcuts, chat channels, MCP runtime, and subsequent Agent sessions pick up the latest config.
+7. If `workspaceRoot` changed, still tell the user a restart is usually required because many services resolve the workspace path at startup.
 
 ## Capability Boundaries
 
@@ -46,3 +47,4 @@ Use this skill when the task is to change Kian itself: app preferences, workspac
 - Arrays such as `enabledModels`, `args`, `userIds`, `serverIds`, and `channelIds` are still arrays of strings.
 - Map-like fields such as `env` and `headers` remain string-to-string objects.
 - Required nested objects under `shortcuts` and `chatChannels` are still present.
+- `ReloadSettings` was called after the config edit unless the task was read-only.

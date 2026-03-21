@@ -9,6 +9,7 @@ import path from "node:path";
 import { appOperationEvents } from "./appOperationEvents";
 import type { CustomToolDef } from "./customTools";
 import { repositoryService } from "./repositoryService";
+import { settingsRuntimeService } from "./settingsRuntimeService";
 import { WORKSPACE_ROOT } from "./workspacePaths";
 
 const MODULE_LABELS: Record<ModuleType, string> = {
@@ -326,6 +327,26 @@ export const createAppOperationTools = (
         } catch (error) {
           return {
             text: `BuildAndRefreshApp failed: ${toErrorMessage(error)}`,
+            isError: true,
+          };
+        }
+      },
+    },
+    {
+      name: "ReloadSettings",
+      label: "ReloadSettings",
+      description:
+        "重新加载并应用当前设置，让快捷键、聊天通道和后续 Agent 会话按最新配置生效。",
+      parameters: Type.Object({}),
+      async handler() {
+        try {
+          await settingsRuntimeService.reload();
+          return {
+            text: "已重新加载并应用最新设置；新的快捷键、通道配置和后续 Agent 会话都会按最新配置生效。",
+          };
+        } catch (error) {
+          return {
+            text: `ReloadSettings failed: ${toErrorMessage(error)}`,
             isError: true,
           };
         }

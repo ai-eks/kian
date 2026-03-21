@@ -205,5 +205,10 @@ export const appPreviewWindowService = {
         error,
       );
     }
-  }
+  },
+
+  async refreshActiveWindow(): Promise<void> {
+    if (!state) return;
+    await this.refreshForProject(state.projectId);
+  },
 };

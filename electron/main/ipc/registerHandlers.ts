@@ -64,10 +64,7 @@ import { appPreviewWindowService } from '../services/appPreviewWindowService';
 import { agentService } from '../services/agentService';
 import { linkOpenService } from '../services/linkOpenService';
 import { resolveLocalMediaPath } from '../services/localMediaPath';
-
-interface RegisterHandlersOptions {
-  onShortcutConfigSaved?: () => Promise<void> | void;
-}
+import { settingsRuntimeService } from '../services/settingsRuntimeService';
 
 const UPLOAD_DIALOG_EXTENSIONS = [
   'pdf', 'docx', 'csv', 'xlsx',
@@ -127,7 +124,14 @@ const resolveFileTargetPath = (input: {
   return resolved;
 };
 
-export const registerHandlers = (options?: RegisterHandlersOptions): void => {
+const settingsReloadTargets = {
+  shortcut: ['renderer', 'quickLauncherShortcut'] as const,
+  agentRuntime: ['renderer', 'agentSessions'] as const,
+  chatChannels: ['renderer', 'chatChannels', 'agentSessions'] as const,
+  general: ['renderer', 'appPreviewWindow'] as const
+};
+
+export const registerHandlers = (): void => {
   const refreshChatChannel = async (): Promise<void> => {
     await chatChannelService.refresh();
   };
@@ -371,7 +375,9 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
   );
   handle('settings:saveShortcutConfig', saveShortcutConfigSchema, async (input) => {
     await settingsService.saveShortcutConfig(input);
-    await options?.onShortcutConfigSaved?.();
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.shortcut]
+    });
     return true;
   });
   handle('settings:getClaudeSecret', z.object({ provider: z.string().min(1) }), async (input) =>
@@ -387,6 +393,9 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
       api: input.api,
       customModels: input.customModels,
       enabledModels: input.enabledModels
+    });
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.agentRuntime]
     });
     return true;
   });
@@ -408,6 +417,9 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
       secret: input.secret,
       enabledModels: input.enabledModels
     });
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.agentRuntime]
+    });
     return true;
   });
   handle('settings:getTelegramChatChannelStatus', z.object({}).optional(), async () =>
@@ -423,7 +435,9 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
       botToken: input.botToken,
       userIds: input.userIds
     });
-    await refreshChatChannel();
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.chatChannels]
+    });
     return true;
   });
   handle('settings:getDiscordChatChannelStatus', z.object({}).optional(), async () =>
@@ -440,7 +454,9 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
       serverIds: input.serverIds,
       channelIds: input.channelIds
     });
-    await refreshChatChannel();
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.chatChannels]
+    });
     return true;
   });
   handle('settings:getFeishuChatChannelStatus', z.object({}).optional(), async () =>
@@ -459,14 +475,16 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
       appId: input.appId,
       appSecret: input.appSecret
     });
-    await refreshChatChannel();
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.chatChannels]
+    });
     return true;
   });
   handle('settings:getBroadcastChannels', z.object({}).optional(), async () =>
     settingsService.getBroadcastChannels()
   );
   handle('settings:saveBroadcastChannelsConfig', saveBroadcastChannelConfigSchema, async (input) => {
-    return settingsService.saveBroadcastChannelsConfig({
+    const result = await settingsService.saveBroadcastChannelsConfig({
       channels: input.channels.map((channel) => ({
         id: channel.id,
         name: channel.name,
@@ -474,19 +492,35 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
         webhook: channel.webhook
       }))
     });
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.chatChannels]
+    });
+    return result;
   });
   handle('settings:getMcpServers', z.object({}).optional(), async () =>
     settingsService.getMcpServers()
   );
-  handle('settings:addMcpServer', addMcpServerSchema, async (input) =>
-    settingsService.addMcpServer(input)
-  );
-  handle('settings:updateMcpServer', updateMcpServerSchema, async (input) =>
-    settingsService.updateMcpServer(input)
-  );
-  handle('settings:setMcpServerEnabled', setMcpServerEnabledSchema, async (input) =>
-    settingsService.setMcpServerEnabled(input)
-  );
+  handle('settings:addMcpServer', addMcpServerSchema, async (input) => {
+    const result = await settingsService.addMcpServer(input);
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.agentRuntime]
+    });
+    return result;
+  });
+  handle('settings:updateMcpServer', updateMcpServerSchema, async (input) => {
+    const result = await settingsService.updateMcpServer(input);
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.agentRuntime]
+    });
+    return result;
+  });
+  handle('settings:setMcpServerEnabled', setMcpServerEnabledSchema, async (input) => {
+    const result = await settingsService.setMcpServerEnabled(input);
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.agentRuntime]
+    });
+    return result;
+  });
 
   handle('settings:getGeneralConfig', z.object({}).optional(), async () =>
     settingsService.getGeneralConfig()
@@ -503,6 +537,9 @@ export const registerHandlers = (options?: RegisterHandlersOptions): void => {
         mainSubModeEnabled: true,
         quickGuideDismissed: input.quickGuideDismissed,
         chatInputShortcutTipDismissed: input.chatInputShortcutTipDismissed
+      });
+      await settingsRuntimeService.reload({
+        targets: [...settingsReloadTargets.general]
       });
       return true;
     }

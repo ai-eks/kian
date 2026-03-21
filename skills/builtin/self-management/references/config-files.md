@@ -37,6 +37,7 @@ Important notes:
 
 - `mainSubModeEnabled` exists in the DTO, but the current implementation always returns `true` and does not persist it to disk.
 - Changing `workspaceRoot` usually requires restarting the app to fully apply, because many services capture the workspace path at startup.
+- After manually editing persisted settings, call the `ReloadSettings` app-operation tool so runtime state is reapplied. This reloads things such as shortcuts, chat channels, MCP runtime, and subsequent Agent sessions, but it does not remove the need to restart after a `workspaceRoot` change.
 
 ## Workspace Settings Shape
 
@@ -186,3 +187,4 @@ Minimal valid shape:
 - Preserve unrelated settings whenever possible.
 - Keep secret fields as plain strings; do not replace them with placeholders unless the user asked to remove them.
 - Re-open the edited JSON and verify it still parses cleanly.
+- If you changed persisted settings, finish by calling `ReloadSettings` so the updated config takes effect.

@@ -46,6 +46,7 @@ import { repositoryService } from './services/repositoryService';
 import { registerAppPreviewPermissionService } from './services/appPreviewPermissionService';
 import { linkOpenService } from './services/linkOpenService';
 import { settingsService } from './services/settingsService';
+import { settingsRuntimeService } from './services/settingsRuntimeService';
 
 const APP_DISPLAY_NAME = 'Kian';
 const LOCAL_MEDIA_SCHEME = 'kian-local';
@@ -1150,13 +1151,10 @@ app
 
     registerLocalMediaProtocol();
     registerAppPreviewPermissionService();
-    registerHandlers({
-      onShortcutConfigSaved: async () => {
-        await refreshQuickLauncherShortcutRegistration().catch((error) => {
-          logger.error('Failed to refresh quick launcher shortcut after settings save', error);
-        });
-      }
+    settingsRuntimeService.configure({
+      refreshQuickLauncherShortcutRegistration
     });
+    registerHandlers();
     await skillService.syncBuiltinSkillsOnStartup().catch((error) => {
       logger.error('Failed to sync builtin skills on startup', error);
     });

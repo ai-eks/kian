@@ -176,6 +176,10 @@ export const MainLayout = () => {
   useEffect(
     () =>
       api.appOperation.subscribe((event) => {
+        if (event.type === 'reload_settings') {
+          void queryClient.invalidateQueries({ queryKey: ['settings'] });
+          return;
+        }
         if (event.type !== 'navigate') return;
 
         const searchParams = new URLSearchParams();
@@ -195,7 +199,7 @@ export const MainLayout = () => {
           { replace: true }
         );
       }),
-    [navigate]
+    [navigate, queryClient]
   );
 
   useEffect(() => {

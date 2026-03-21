@@ -3,6 +3,7 @@ import type { AppOperationEvent, ProjectDTO } from "../../src/shared/types";
 import { appOperationEvents } from "../../electron/main/services/appOperationEvents";
 import { createAppOperationTools } from "../../electron/main/services/appOperationMcpServer";
 import { repositoryService } from "../../electron/main/services/repositoryService";
+import { settingsRuntimeService } from "../../electron/main/services/settingsRuntimeService";
 
 vi.mock("../../electron/main/services/repositoryService", () => ({
   repositoryService: {
@@ -11,7 +12,14 @@ vi.mock("../../electron/main/services/repositoryService", () => ({
   },
 }));
 
+vi.mock("../../electron/main/services/settingsRuntimeService", () => ({
+  settingsRuntimeService: {
+    reload: vi.fn(),
+  },
+}));
+
 const mockedRepositoryService = vi.mocked(repositoryService);
+const mockedSettingsRuntimeService = vi.mocked(settingsRuntimeService);
 
 const createProjectDto = (
   overrides: Partial<ProjectDTO> = {},
@@ -64,7 +72,8 @@ describe("createAppOperationTools", () => {
       expect(result).toEqual({
         text: [
           "Agent 已创建：阿青 (agent-a)",
-          "Agent ID（工作区目录）：agent-a",
+          "Agent ID：agent-a",
+          "工作目录：/Users/lei/KianWorkspaceTest/agent-a",
           "如果用户没有明确指定目标 Agent，后续任务默认继续由主 Agent 处理。",
           "如需进入该 Agent 工作区，请调用 OpenAgent。",
         ].join("\n"),
@@ -110,5 +119,20 @@ describe("createAppOperationTools", () => {
     } finally {
       dispose();
     }
+  });
+
+  it("ReloadSettings reloads and reapplies runtime settings", async () => {
+    const tool = createAppOperationTools("current-agent", "main").find(
+      (item) => item.name === "ReloadSettings",
+    );
+
+    expect(tool).toBeDefined();
+
+    const result = await tool!.handler({});
+
+    expect(mockedSettingsRuntimeService.reload).toHaveBeenCalledWith();
+    expect(result).toEqual({
+      text: "已重新加载并应用最新设置；新的快捷键、通道配置和后续 Agent 会话都会按最新配置生效。",
+    });
   });
 });

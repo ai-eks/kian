@@ -323,6 +323,9 @@ export type AppOperationEvent =
   | {
       type: 'app_preview_refreshed';
       projectId: string;
+    }
+  | {
+      type: 'reload_settings';
     };
 
 export interface AppUpdateStatusDTO {
