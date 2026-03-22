@@ -144,16 +144,18 @@ const checkCommand = async (
 
 export const onboardingService = {
   async getEnvironmentStatus(): Promise<OnboardingEnvironmentStatus> {
-    const [node, pnpm, claudeCode] = await Promise.all([
+    const [node, pnpm, claudeCode, codex] = await Promise.all([
       checkCommand("node", [["--version"]]),
       checkCommand("pnpm", [["--version"]]),
       checkCommand("claude", [["--version"], ["-v"], ["version"]]),
+      checkCommand("codex", [["--version"], ["-v"], ["version"]]),
     ]);
 
     return {
       node,
       pnpm,
       claudeCode,
+      codex,
     };
   },
 };
