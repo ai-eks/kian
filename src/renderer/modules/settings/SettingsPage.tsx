@@ -1,4 +1,9 @@
-import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
+import {
+  DeleteOutlined,
+  PlusOutlined,
+  SearchOutlined,
+  WechatOutlined,
+} from "@ant-design/icons";
 import type { MainLayoutOutletContext } from "@renderer/app/MainLayout";
 import { ScrollArea } from "@renderer/components/ScrollArea";
 import { useAppI18n } from "@renderer/i18n/AppI18nProvider";
@@ -30,6 +35,7 @@ import {
   Col,
   Form,
   Input,
+  QRCode,
   Progress,
   Row,
   Select,
@@ -340,6 +346,7 @@ type ChannelFormValues = {
   botToken?: string;
   appId?: string;
   appSecret?: string;
+  accountId?: string;
   userIdsText?: string;
   serverIds?: string[];
   channelIds?: string[];
@@ -631,6 +638,7 @@ export const SettingsPage = () => {
   const [telegramForm] = Form.useForm<ChannelFormValues>();
   const [discordForm] = Form.useForm<ChannelFormValues>();
   const [feishuForm] = Form.useForm<ChannelFormValues>();
+  const [weixinForm] = Form.useForm<ChannelFormValues>();
 
   const workspaceRootValue =
     Form.useWatch("workspaceRoot", { form: generalForm, preserve: true }) ?? "";
@@ -713,6 +721,13 @@ export const SettingsPage = () => {
     preserve: true,
   });
 
+  const weixinEnabled =
+    Form.useWatch("enabled", { form: weixinForm, preserve: true }) ?? false;
+  const weixinAccountIdValue = Form.useWatch("accountId", {
+    form: weixinForm,
+    preserve: true,
+  });
+
   const [agentModelSearch, setAgentModelSearch] = useState("");
   const [providerSearch, setProviderSearch] = useState("");
   const [providerModelSearch, setProviderModelSearch] = useState("");
@@ -726,6 +741,13 @@ export const SettingsPage = () => {
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
   const autoSaveInFlightRef = useRef(false);
   const aboutAutoCheckTriggeredRef = useRef(false);
+  const currentWeixinQrSessionKeyRef = useRef<string | null>(null);
+  const [activatingWeixinAccountId, setActivatingWeixinAccountId] = useState<
+    string | null
+  >(null);
+  const [removingWeixinAccountId, setRemovingWeixinAccountId] = useState<
+    string | null
+  >(null);
   const claudeProviderDraftsRef = useRef<Record<string, ClaudeFormValues>>({});
   const previousCustomModelIdsSignatureRef = useRef<string | null>(null);
   const [broadcastChannelsDraft, setBroadcastChannelsDraft] = useState<
@@ -771,6 +793,10 @@ export const SettingsPage = () => {
   const feishuStatusQuery = useQuery({
     queryKey: ["settings", "chat-channel", "feishu"],
     queryFn: api.settings.getFeishuChatChannelStatus,
+  });
+  const weixinStatusQuery = useQuery({
+    queryKey: ["settings", "chat-channel", "weixin"],
+    queryFn: api.settings.getWeixinChatChannelStatus,
   });
   const broadcastChannelsQuery = useQuery({
     queryKey: ["settings", "broadcast-channels"],
@@ -850,6 +876,27 @@ export const SettingsPage = () => {
         appId: values.appId,
         appSecret: values.appSecret,
       }),
+  });
+  const saveWeixinMutation = useMutation({
+    mutationFn: (values: ChannelFormValues) =>
+      api.settings.saveWeixinChatChannelConfig({
+        enabled: values.enabled,
+        accountId: values.accountId,
+      }),
+  });
+  const startWeixinQrLoginMutation = useMutation({
+    mutationFn: (payload?: { forceRefresh?: boolean }) =>
+      api.settings.startWeixinQrLogin(payload),
+  });
+  const waitForWeixinQrLoginMutation = useMutation({
+    mutationFn: (payload: {
+      sessionKey: string;
+      timeoutMs?: number;
+    }) => api.settings.waitForWeixinQrLogin(payload),
+  });
+  const removeWeixinAccountMutation = useMutation({
+    mutationFn: (accountId: string) =>
+      api.settings.removeWeixinAccount({ accountId }),
   });
   const saveBroadcastChannelsMutation = useMutation({
     mutationFn: (channels: BroadcastChannelDraft[]) =>
@@ -1150,6 +1197,14 @@ export const SettingsPage = () => {
   }, [feishuForm, feishuStatusQuery.data]);
 
   useEffect(() => {
+    if (!weixinStatusQuery.data) return;
+    weixinForm.setFieldsValue({
+      enabled: weixinStatusQuery.data.enabled,
+      accountId: weixinStatusQuery.data.accountId,
+    });
+  }, [weixinForm, weixinStatusQuery.data]);
+
+  useEffect(() => {
     if (!broadcastChannelsQuery.data) return;
     setBroadcastChannelsDraft(
       broadcastChannelsQuery.data.map((channel) => ({
@@ -1272,6 +1327,8 @@ export const SettingsPage = () => {
   const feishuAppSecretFilled =
     hasInputFeishuAppSecret || hasSavedFeishuCredentials;
 
+  const weixinAccountIdText = String(weixinAccountIdValue ?? "").trim();
+
   const normalizedEnabledModels = normalizeIdList(falEnabledModelsValue);
   const savedEnabledModels = normalizeIdList(
     providerStatusQuery.data?.enabledModels ?? [],
@@ -1318,6 +1375,7 @@ export const SettingsPage = () => {
   const telegramStatus = telegramStatusQuery.data;
   const discordStatus = discordStatusQuery.data;
   const feishuStatus = feishuStatusQuery.data;
+  const weixinStatus = weixinStatusQuery.data;
 
   const currentProviderConfig = claudeStatus?.providers[provider];
   const normalizedEnabledAgentModels = normalizeIdList(enabledModelsValue);
@@ -1356,6 +1414,10 @@ export const SettingsPage = () => {
       feishuAppIdText !== (feishuStatus.appId ?? "") ||
       feishuAppSecretText !== (feishuStatus.appSecret ?? "")
     : false;
+  const weixinDirty = weixinStatus
+    ? weixinEnabled !== weixinStatus.enabled ||
+      weixinAccountIdText !== (weixinStatus.accountId ?? "")
+    : false;
   const broadcastDirty = broadcastChannelsQuery.data
     ? !isSameBroadcastChannelDraft(
         normalizedBroadcastChannelsDraft,
@@ -1371,6 +1433,7 @@ export const SettingsPage = () => {
     telegramDirty ||
     discordDirty ||
     feishuDirty ||
+    weixinDirty ||
     broadcastDirty;
   const resolvedUpdateStatus = updateStatus ?? updateStatusQuery.data ?? null;
   const {
@@ -1392,7 +1455,15 @@ export const SettingsPage = () => {
     saveTelegramMutation.isPending ||
     saveDiscordMutation.isPending ||
     saveFeishuMutation.isPending ||
+    saveWeixinMutation.isPending ||
     saveBroadcastChannelsMutation.isPending;
+  const weixinQrSession = weixinStatusQuery.data?.qrSession ?? null;
+  const hasWeixinQrSessionContent = Boolean(
+    weixinQrSession?.qrCodeImageSrc || weixinQrSession?.qrCodeValue,
+  );
+  const weixinAvailableAccounts = weixinStatusQuery.data?.availableAccounts ?? [];
+  const activeWeixinAccountId =
+    weixinAccountIdText || weixinStatusQuery.data?.activeAccountId || "";
 
   const handleAutoSaveChanges = useCallback(async () => {
     if (autoSaveInFlightRef.current) return;
@@ -1539,6 +1610,18 @@ export const SettingsPage = () => {
     );
 
     await runSaveTask(
+      weixinDirty,
+      async () => {
+        const values = weixinForm.getFieldsValue(true) as ChannelFormValues;
+        await saveWeixinMutation.mutateAsync({
+          ...values,
+          accountId: String(values.accountId ?? "").trim(),
+        });
+      },
+      weixinStatusQuery.refetch,
+    );
+
+    await runSaveTask(
       broadcastDirty,
       async () => {
         const saved = await saveBroadcastChannelsMutation.mutateAsync(
@@ -1592,6 +1675,9 @@ export const SettingsPage = () => {
     feishuDirty,
     feishuForm,
     feishuStatusQuery.refetch,
+    weixinDirty,
+    weixinForm,
+    weixinStatusQuery.refetch,
     broadcastDirty,
     broadcastChannelsQuery.refetch,
     providerDirty,
@@ -1603,6 +1689,7 @@ export const SettingsPage = () => {
     saveBroadcastChannelsMutation.mutateAsync,
     saveDiscordMutation.mutateAsync,
     saveFeishuMutation.mutateAsync,
+    saveWeixinMutation.mutateAsync,
     saveProviderMutation.mutateAsync,
     saveTelegramMutation.mutateAsync,
     telegramDirty,
@@ -1637,6 +1724,8 @@ export const SettingsPage = () => {
         feishuEnabled,
         feishuAppIdText,
         feishuAppSecretText,
+        weixinEnabled,
+        weixinAccountIdText,
         normalizedBroadcastChannelsDraft
           .map(
             (channel) =>
@@ -1669,6 +1758,8 @@ export const SettingsPage = () => {
       feishuEnabled,
       feishuAppIdText,
       feishuAppSecretText,
+      weixinEnabled,
+      weixinAccountIdText,
       normalizedBroadcastChannelsDraft,
     ],
   );
@@ -1736,6 +1827,136 @@ export const SettingsPage = () => {
       message.error(error instanceof Error ? error.message : t("安装更新失败"));
     }
   }, [installUpdateMutation, t]);
+
+  const handleWaitForWeixinQrLogin = useCallback(async (sessionKey: string) => {
+    currentWeixinQrSessionKeyRef.current = sessionKey;
+    try {
+      const result = await waitForWeixinQrLoginMutation.mutateAsync({
+        sessionKey,
+      });
+      if (currentWeixinQrSessionKeyRef.current !== sessionKey) {
+        return;
+      }
+      currentWeixinQrSessionKeyRef.current = null;
+      await weixinStatusQuery.refetch();
+      if (result.connected) {
+        message.success(t("微信账号登录成功"));
+        return;
+      }
+      message.info(result.message || t("微信登录尚未完成"));
+    } catch (error) {
+      if (currentWeixinQrSessionKeyRef.current !== sessionKey) {
+        return;
+      }
+      currentWeixinQrSessionKeyRef.current = null;
+      message.error(
+        error instanceof Error ? error.message : t("等待微信登录确认失败"),
+      );
+    }
+  }, [
+    t,
+    waitForWeixinQrLoginMutation,
+    weixinStatusQuery,
+  ]);
+
+  const handleStartWeixinQrLogin = useCallback(async (options?: {
+    silent?: boolean;
+  }) => {
+    try {
+      const session = await startWeixinQrLoginMutation.mutateAsync({
+        forceRefresh: true,
+      });
+      await weixinStatusQuery.refetch();
+      if (!options?.silent) {
+        message.success(t("微信登录二维码已刷新"));
+      }
+      void handleWaitForWeixinQrLogin(session.sessionKey);
+    } catch (error) {
+      message.error(
+        error instanceof Error ? error.message : t("启动微信扫码登录失败"),
+      );
+    }
+  }, [
+    handleWaitForWeixinQrLogin,
+    startWeixinQrLoginMutation,
+    t,
+    weixinStatusQuery,
+  ]);
+
+  const handleActivateWeixinAccount = useCallback(async (accountId: string) => {
+    const normalizedAccountId = accountId.trim();
+    if (!normalizedAccountId || normalizedAccountId === activeWeixinAccountId) {
+      return;
+    }
+
+    try {
+      setActivatingWeixinAccountId(normalizedAccountId);
+      await saveWeixinMutation.mutateAsync({
+        enabled: weixinEnabled,
+        accountId: normalizedAccountId,
+      });
+      await weixinStatusQuery.refetch();
+    } catch (error) {
+      message.error(
+        error instanceof Error ? error.message : t("激活微信账号失败"),
+      );
+    } finally {
+      setActivatingWeixinAccountId(null);
+    }
+  }, [
+    activeWeixinAccountId,
+    saveWeixinMutation,
+    t,
+    weixinEnabled,
+    weixinStatusQuery,
+  ]);
+
+  const handleRemoveWeixinAccount = useCallback(async (accountId: string) => {
+    const normalizedAccountId = accountId.trim();
+    if (!normalizedAccountId) {
+      return;
+    }
+
+    try {
+      setRemovingWeixinAccountId(normalizedAccountId);
+      await removeWeixinAccountMutation.mutateAsync(normalizedAccountId);
+      await weixinStatusQuery.refetch();
+      message.success(t("微信账号已删除"));
+    } catch (error) {
+      message.error(
+        error instanceof Error ? error.message : t("删除微信账号失败"),
+      );
+    } finally {
+      setRemovingWeixinAccountId(null);
+    }
+  }, [
+    removeWeixinAccountMutation,
+    t,
+    weixinStatusQuery,
+  ]);
+
+  useEffect(() => {
+    if (!weixinQrSession?.expiresAt) {
+      return;
+    }
+
+    const expiresAtMs = new Date(weixinQrSession.expiresAt).getTime();
+    if (!Number.isFinite(expiresAtMs)) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void handleStartWeixinQrLogin({ silent: true });
+    }, Math.max(0, expiresAtMs - Date.now()) + 250);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    handleStartWeixinQrLogin,
+    weixinQrSession?.expiresAt,
+    weixinQrSession?.sessionKey,
+  ]);
 
   useEffect(() => {
     if (activeSettingsTab !== "about") {
@@ -2952,6 +3173,201 @@ export const SettingsPage = () => {
                                       ]}
                                     />
                                   </div>
+                                </>
+                              ) : null}
+                            </Form>
+                          ),
+                        },
+                        {
+                          key: "weixin",
+                          label: "微信",
+                          children: (
+                            <Form
+                              form={weixinForm}
+                              layout="vertical"
+                              initialValues={{
+                                enabled: false,
+                                accountId: "",
+                              }}
+                            >
+                              <Form.Item name="enabled" valuePropName="checked">
+                                <Switch
+                                  checkedChildren="已启用"
+                                  unCheckedChildren="未启用"
+                                />
+                              </Form.Item>
+
+                              {weixinEnabled ? (
+                                <>
+                                  <Form.Item
+                                    label={getFieldLabel(
+                                      "已绑定微信账号",
+                                      weixinAvailableAccounts.length > 0,
+                                    )}
+                                    extra={t(
+                                      "扫码登录后会自动写入；也可以从已保存账号中切换。",
+                                    )}
+                                  >
+                                    <Form.Item name="accountId" hidden>
+                                      <Input />
+                                    </Form.Item>
+                                    {weixinAvailableAccounts.length > 0 ? (
+                                      <div className="space-y-3">
+                                        {weixinAvailableAccounts.map((account) => {
+                                          const isActive =
+                                            account.accountId === activeWeixinAccountId;
+                                          return (
+                                            <div
+                                              key={account.accountId}
+                                              className={`flex flex-col gap-3 rounded-xl border px-4 py-3 md:flex-row md:items-center md:justify-between ${
+                                                isActive
+                                                  ? "border-[#07c160]/30 bg-[#07c160]/[0.08]"
+                                                  : "border-slate-200 bg-slate-50"
+                                              }`}
+                                            >
+                                              <div className="min-w-0">
+                                                <div className="break-all text-sm font-medium text-slate-900">
+                                                  {account.accountId}
+                                                </div>
+                                                {account.userId ? (
+                                                  <div className="mt-1 break-all text-xs text-slate-500">
+                                                    {account.userId}
+                                                  </div>
+                                                ) : null}
+                                              </div>
+                                              <div className="flex shrink-0 items-center gap-2">
+                                                <Button
+                                                  type={isActive ? "primary" : "default"}
+                                                  className={
+                                                    isActive
+                                                      ? "!border-[#07c160] !bg-[#07c160] !text-white hover:!border-[#06ad56] hover:!bg-[#06ad56] disabled:!border-[#07c160] disabled:!bg-[#07c160] disabled:!text-white disabled:!opacity-100"
+                                                      : ""
+                                                  }
+                                                  disabled={
+                                                    isActive ||
+                                                    saveWeixinMutation.isPending ||
+                                                    removeWeixinAccountMutation.isPending
+                                                  }
+                                                  loading={
+                                                    activatingWeixinAccountId ===
+                                                      account.accountId &&
+                                                    saveWeixinMutation.isPending
+                                                  }
+                                                  onClick={() => {
+                                                    void handleActivateWeixinAccount(
+                                                      account.accountId,
+                                                    );
+                                                  }}
+                                                >
+                                                  {t(isActive ? "已激活" : "激活")}
+                                                </Button>
+                                                <Button
+                                                  danger
+                                                  icon={<DeleteOutlined />}
+                                                  disabled={
+                                                    saveWeixinMutation.isPending ||
+                                                    removeWeixinAccountMutation.isPending
+                                                  }
+                                                  loading={
+                                                    removingWeixinAccountId ===
+                                                      account.accountId &&
+                                                    removeWeixinAccountMutation.isPending
+                                                  }
+                                                  onClick={() => {
+                                                    void handleRemoveWeixinAccount(
+                                                      account.accountId,
+                                                    );
+                                                  }}
+                                                >
+                                                  {t("删除")}
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                                        {t("暂无已绑定微信账号")}
+                                      </div>
+                                    )}
+                                  </Form.Item>
+
+                                  <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <Typography.Text className="!text-xs !text-slate-500">
+                                        {t("当前轮询账号")}
+                                      </Typography.Text>
+                                      <div className="mt-1 break-all text-sm text-slate-900">
+                                        {weixinStatusQuery.data?.activeAccountId ||
+                                          t("未连接")}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <Typography.Text className="!text-xs !text-slate-500">
+                                        {t("轮询状态")}
+                                      </Typography.Text>
+                                      <div className="mt-1 text-sm text-slate-900">
+                                        {weixinStatusQuery.data?.polling
+                                          ? t("运行中")
+                                          : t("未启用")}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5">
+                                    <div className="flex flex-col items-center gap-4 text-center">
+                                      <Button
+                                        type="primary"
+                                        icon={<WechatOutlined />}
+                                        className="!inline-flex !h-11 !items-center !gap-2 !rounded-xl !border-[#07c160] !bg-[#07c160] !px-5 !text-sm !font-semibold hover:!border-[#06ad56] hover:!bg-[#06ad56] [&_.anticon]:!text-base"
+                                        loading={startWeixinQrLoginMutation.isPending}
+                                        onClick={() => {
+                                          void handleStartWeixinQrLogin();
+                                        }}
+                                      >
+                                        {t(
+                                          weixinQrSession && hasWeixinQrSessionContent
+                                            ? "刷新二维码"
+                                            : "微信登录",
+                                        )}
+                                      </Button>
+                                      <Typography.Paragraph className="!mb-0 !w-full !max-w-none !text-center !text-slate-600 whitespace-nowrap">
+                                        {t(
+                                          weixinQrSession && hasWeixinQrSessionContent
+                                            ? "用微信扫描下方二维码，系统会自动等待登录确认并完成账号写入。"
+                                            : "点击“微信登录”生成二维码，用微信扫码完成登录。",
+                                        )}
+                                      </Typography.Paragraph>
+                                      {weixinQrSession && hasWeixinQrSessionContent ? (
+                                        weixinQrSession.qrCodeImageSrc ? (
+                                          <img
+                                            src={weixinQrSession.qrCodeImageSrc}
+                                            alt={t("微信登录")}
+                                            className="h-48 w-48 rounded-xl border border-slate-200 bg-white p-2"
+                                          />
+                                        ) : weixinQrSession.qrCodeValue ? (
+                                          <div className="rounded-xl border border-slate-200 bg-white p-2">
+                                            <QRCode
+                                              value={weixinQrSession.qrCodeValue}
+                                              type="svg"
+                                              size={176}
+                                              bordered={false}
+                                            />
+                                          </div>
+                                        ) : null
+                                      ) : null}
+                                    </div>
+                                  </div>
+
+                                  {weixinStatusQuery.data?.lastError ? (
+                                    <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                      {t("最近一次微信错误")}:
+                                      <span className="ml-1 break-all">
+                                        {weixinStatusQuery.data.lastError}
+                                      </span>
+                                    </div>
+                                  ) : null}
                                 </>
                               ) : null}
                             </Form>

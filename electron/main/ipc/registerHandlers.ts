@@ -35,11 +35,15 @@ import {
   saveDiscordChatChannelConfigSchema,
   saveFeishuChatChannelConfigSchema,
   saveModelProviderConfigSchema,
+  saveWeixinChatChannelConfigSchema,
+  removeWeixinAccountSchema,
+  startWeixinQrLoginSchema,
   setMcpServerEnabledSchema,
   updateMcpServerSchema,
   updateCheckSchema,
   updateQuitAndInstallSchema,
   saveTelegramChatChannelConfigSchema,
+  waitForWeixinQrLoginSchema,
   sessionCreateSchema,
   windowOpenAppPreviewSchema,
   windowOpenUrlSchema,
@@ -65,6 +69,7 @@ import { agentService } from '../services/agentService';
 import { linkOpenService } from '../services/linkOpenService';
 import { resolveLocalMediaPath } from '../services/localMediaPath';
 import { settingsRuntimeService } from '../services/settingsRuntimeService';
+import { weixinChannelService } from '../services/chatChannel/weixinChannelService';
 
 const UPLOAD_DIALOG_EXTENSIONS = [
   'pdf', 'docx', 'csv', 'xlsx',
@@ -474,6 +479,43 @@ export const registerHandlers = (): void => {
       enabled: input.enabled,
       appId: input.appId,
       appSecret: input.appSecret
+    });
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.chatChannels]
+    });
+    return true;
+  });
+  handle('settings:getWeixinChatChannelStatus', z.object({}).optional(), async () =>
+    weixinChannelService.getStatus()
+  );
+  handle('settings:saveWeixinChatChannelConfig', saveWeixinChatChannelConfigSchema, async (input) => {
+    await settingsService.saveWeixinChatChannelConfig({
+      enabled: input.enabled,
+      accountId: input.accountId
+    });
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.chatChannels]
+    });
+    return true;
+  });
+  handle('settings:startWeixinQrLogin', startWeixinQrLoginSchema, async (input) =>
+    weixinChannelService.startQrLogin({
+      forceRefresh: input?.forceRefresh
+    })
+  );
+  handle('settings:waitForWeixinQrLogin', waitForWeixinQrLoginSchema, async (input) => {
+    const result = await weixinChannelService.waitForQrLogin({
+      sessionKey: input.sessionKey,
+      timeoutMs: input.timeoutMs
+    });
+    await settingsRuntimeService.reload({
+      targets: [...settingsReloadTargets.chatChannels]
+    });
+    return result;
+  });
+  handle('settings:removeWeixinAccount', removeWeixinAccountSchema, async (input) => {
+    await weixinChannelService.removeAccount({
+      accountId: input.accountId
     });
     await settingsRuntimeService.reload({
       targets: [...settingsReloadTargets.chatChannels]

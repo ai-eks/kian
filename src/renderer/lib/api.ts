@@ -34,7 +34,10 @@ import type {
   TaskDTO,
   TaskDetailDTO,
   OpenAppPreviewWindowPayload,
-  TelegramChatChannelStatus
+  TelegramChatChannelStatus,
+  WeixinChatChannelQrSessionDTO,
+  WeixinChatChannelStatus,
+  WeixinQrLoginResultDTO
 } from '@shared/types';
 
 export const api = {
@@ -232,6 +235,25 @@ export const api = {
       appId?: string;
       appSecret?: string;
     }) => unwrap(await window.api.settings.saveFeishuChatChannelConfig(payload)),
+    getWeixinChatChannelStatus: async (): Promise<WeixinChatChannelStatus> =>
+      unwrap(await window.api.settings.getWeixinChatChannelStatus()),
+    saveWeixinChatChannelConfig: async (payload: {
+      enabled: boolean;
+      accountId?: string;
+    }) => unwrap(await window.api.settings.saveWeixinChatChannelConfig(payload)),
+    startWeixinQrLogin: async (payload?: {
+      forceRefresh?: boolean;
+    }): Promise<WeixinChatChannelQrSessionDTO> =>
+      unwrap(await window.api.settings.startWeixinQrLogin(payload)),
+    waitForWeixinQrLogin: async (payload: {
+      sessionKey: string;
+      timeoutMs?: number;
+    }): Promise<WeixinQrLoginResultDTO> =>
+      unwrap(await window.api.settings.waitForWeixinQrLogin(payload)),
+    removeWeixinAccount: async (payload: {
+      accountId: string;
+    }): Promise<boolean> =>
+      unwrap(await window.api.settings.removeWeixinAccount(payload)),
     getBroadcastChannels: async (): Promise<BroadcastChannelDTO[]> =>
       unwrap(await window.api.settings.getBroadcastChannels()),
     saveBroadcastChannelsConfig: async (payload: {

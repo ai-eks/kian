@@ -1,4 +1,5 @@
 import * as Lark from "@larksuiteoapi/node-sdk";
+import type { WeixinInboundMessage } from "@kian/weixin-adapter";
 import type {
   ChatAttachmentDTO,
   ChatModuleType,
@@ -45,6 +46,7 @@ import {
   sendTelegramTyping as sendTelegramTypingImpl,
   setTelegramMessageReaction as setTelegramMessageReactionImpl,
 } from "./chatChannel/telegramTransport";
+import { weixinChannelService } from "./chatChannel/weixinChannelService";
 import {
   cleanupInboundTempDirectory,
   createInboundTempDirectory,
@@ -84,6 +86,10 @@ const DISCORD_REPLY_REACTION_EMOJI = "✨";
 const FEISHU_REPLY_REACTION_EMOJI_TYPE = "Get";
 const TELEGRAM_UNAUTHORIZED_USER_MESSAGE =
   "你不是我的主人，我要等我的主人回来。";
+const WEIXIN_SUPPORTED_INPUT_MESSAGE =
+  "当前微信渠道 MVP 仅支持文本消息。";
+const WEIXIN_HELP_MESSAGE =
+  "已连接到 Kian Agent。当前微信渠道 MVP 支持扫码登录、长轮询和文本消息收发。";
 const DISCORD_GATEWAY_URL = "wss://gateway.discord.gg";
 const DISCORD_GATEWAY_RECONNECT_DELAY_MS = 5_000;
 const DISCORD_GATEWAY_INTENTS = 1 << 0;
@@ -116,8 +122,9 @@ const getDirectChannelSessionKey = (
   scope: ChatScope,
   provider: SessionReplyContext["provider"],
   chatId: string,
+  accountId?: string,
 ): string =>
-  `${scope.type === "main" ? MAIN_AGENT_SCOPE_ID : scope.projectId}:${provider}:${chatId}`;
+  `${scope.type === "main" ? MAIN_AGENT_SCOPE_ID : scope.projectId}:${provider}:${accountId ?? "-"}:${chatId}`;
 
 interface TelegramChat {
   id: number | string;
@@ -279,8 +286,9 @@ interface TelegramAssistantProgressiveStreamer {
 }
 
 interface SessionReplyContext {
-  provider: "telegram" | "discord" | "feishu";
+  provider: "telegram" | "discord" | "feishu" | "weixin";
   chatId: string;
+  accountId?: string;
 }
 
 let runtime: TelegramRuntime | null = null;
@@ -1104,12 +1112,14 @@ const rememberSessionReplyContext = (input: {
   sessionId: string;
   provider: SessionReplyContext["provider"];
   chatId: string;
+  accountId?: string;
 }): void => {
   sessionReplyContextByKey.set(
     getSessionReplyContextKey(input.scope, input.sessionId),
     {
       provider: input.provider,
       chatId: input.chatId,
+      accountId: input.accountId,
     },
   );
 };
@@ -1119,9 +1129,15 @@ const rememberDirectChannelSession = (input: {
   sessionId: string;
   provider: SessionReplyContext["provider"];
   chatId: string;
+  accountId?: string;
 }): void => {
   directChannelSessionIdByKey.set(
-    getDirectChannelSessionKey(input.scope, input.provider, input.chatId),
+    getDirectChannelSessionKey(
+      input.scope,
+      input.provider,
+      input.chatId,
+      input.accountId,
+    ),
     input.sessionId,
   );
   rememberSessionReplyContext(input);
@@ -1133,11 +1149,13 @@ const resolveDirectChannelSessionId = async (input: {
   module: ChatModuleType;
   title: string;
   chatId: string;
+  accountId?: string;
 }): Promise<string> => {
   const key = getDirectChannelSessionKey(
     input.scope,
     input.provider,
     input.chatId,
+    input.accountId,
   );
   const existingPromise = directChannelSessionPromiseByKey.get(key);
   if (existingPromise) {
@@ -1157,6 +1175,7 @@ const resolveDirectChannelSessionId = async (input: {
           sessionId: existingSessionId,
           provider: input.provider,
           chatId: input.chatId,
+          accountId: input.accountId,
         });
         return existingSessionId;
       }
@@ -1173,6 +1192,7 @@ const resolveDirectChannelSessionId = async (input: {
       sessionId: session.id,
       provider: input.provider,
       chatId: input.chatId,
+      accountId: input.accountId,
     });
     return session.id;
   })();
@@ -1193,6 +1213,7 @@ const resolveLatestExistingSessionId = async (input: {
   module: ChatModuleType;
   title: string;
   chatId: string;
+  accountId?: string;
 }): Promise<string> => {
   const sessions = await repositoryService.listChatSessions(input.scope);
   const latestSession = sessions[0];
@@ -1202,6 +1223,7 @@ const resolveLatestExistingSessionId = async (input: {
       sessionId: latestSession.id,
       provider: input.provider,
       chatId: input.chatId,
+      accountId: input.accountId,
     });
     return latestSession.id;
   }
@@ -1216,6 +1238,7 @@ const resolveLatestExistingSessionId = async (input: {
     sessionId: session.id,
     provider: input.provider,
     chatId: input.chatId,
+    accountId: input.accountId,
   });
   return session.id;
 };
@@ -2438,6 +2461,100 @@ const processBotIncomingMessage = async (input: {
   }
 };
 
+const processWeixinMessage = async (
+  message: WeixinInboundMessage,
+): Promise<void> => {
+  const state = weixinChannelService.getRuntimeContext();
+  if (!state) {
+    return;
+  }
+
+  const chatId = normalizeChatId(message.fromUserId);
+  if (!chatId) {
+    return;
+  }
+
+  const text = message.text?.trim() ?? "";
+  const replyText = async (reply: string): Promise<void> => {
+    await weixinChannelService.sendText({
+      accountId: message.accountId,
+      toUserId: chatId,
+      text: reply,
+      contextToken: message.contextToken,
+    });
+  };
+
+  if (!text) {
+    await replyText(WEIXIN_SUPPORTED_INPUT_MESSAGE);
+    return;
+  }
+
+  if (text === "/start" || text === "/help") {
+    await replyText(WEIXIN_HELP_MESSAGE);
+    return;
+  }
+
+  try {
+    const sessionId = await resolveDirectChannelSessionId({
+      scope: state.scope,
+      provider: "weixin",
+      module: CHANNEL_DEFAULT_MODULE,
+      title: "",
+      chatId,
+      accountId: message.accountId,
+    });
+
+    const progressiveStreamer = createTelegramAssistantProgressiveStreamer({
+      sendToolRunningMessage: async (tool) => {
+        await replyText(formatTelegramToolRunningMessage(tool));
+      },
+      sendToolDoneMessage: async (tool) => {
+        await replyText(formatTelegramToolDoneMessage(tool));
+      },
+      sendAssistantMessage: async (assistantMessage, isError) => {
+        const messageText = formatTelegramAssistantBody({
+          message: assistantMessage,
+          hasAttachments: false,
+          isError,
+        });
+        await replyText(messageText || "已处理完成。");
+      },
+    });
+
+    const requestId = randomUUID();
+    const result = await chatService.send(
+      {
+        scope: state.scope,
+        module: CHANNEL_DEFAULT_MODULE,
+        sessionId,
+        requestId,
+        message: text,
+      },
+      (streamEvent) => {
+        chatEvents.emitStream(streamEvent);
+        progressiveStreamer.pushEvent(streamEvent);
+      },
+    );
+
+    await progressiveStreamer.finalize({
+      fallbackAssistantMessage: result.assistantMessage,
+      toolActions: result.toolActions,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error("Weixin message process failed", {
+      accountId: message.accountId,
+      fromUserId: message.fromUserId,
+      error,
+    });
+    try {
+      await replyText(`处理失败：${errorMessage}`);
+    } catch (notifyError) {
+      logger.error("Weixin error notification failed", notifyError);
+    }
+  }
+};
+
 const isDiscordMessageAllowedByScope = (input: {
   runtime: DiscordRuntime;
   chatId: string;
@@ -2795,6 +2912,7 @@ const stopService = (): void => {
   stopDiscordPolling();
   stopDiscordGatewayConnection();
   stopFeishuPolling();
+  void weixinChannelService.stop();
   discordPolling = false;
   feishuPolling = false;
   discordLastMessageIdByChat = new Map<string, string>();
@@ -2809,6 +2927,12 @@ const stopService = (): void => {
   directChannelSessionPromiseByKey = new Map<string, Promise<string>>();
   runtimeSignature = "";
 };
+
+weixinChannelService.configure({
+  onMessage: async (message) => {
+    await processWeixinMessage(message);
+  },
+});
 
 export const chatChannelService = {
   createSessionAssistantReplyStreamer(input: {
@@ -2854,6 +2978,24 @@ export const chatChannelService = {
         },
         sendDocument: async (filePath) => {
           await sendDiscordBotDocument(state.token, replyContext.chatId, filePath);
+        },
+      });
+    }
+
+    if (replyContext.provider === "weixin") {
+      if (!replyContext.accountId) {
+        return null;
+      }
+      return createDirectChannelReplyStreamer({
+        provider: "weixin",
+        projectId: input.projectId,
+        chatId: replyContext.chatId,
+        sendText: async (text) => {
+          await weixinChannelService.sendText({
+            accountId: replyContext.accountId!,
+            toUserId: replyContext.chatId,
+            text,
+          });
         },
       });
     }
@@ -2974,10 +3116,11 @@ export const chatChannelService = {
   },
 
   async refresh(): Promise<void> {
-    const [telegram, discord, feishu, mainSubModeEnabled] = await Promise.all([
+    const [telegram, discord, feishu, weixin, mainSubModeEnabled] = await Promise.all([
       settingsService.getTelegramChatChannelRuntime(),
       settingsService.getDiscordChatChannelRuntime(),
       settingsService.getFeishuChatChannelRuntime(),
+      settingsService.getWeixinChatChannelRuntime(),
       settingsService.getMainSubModeEnabled(),
     ]);
 
@@ -2987,6 +3130,12 @@ export const chatChannelService = {
     };
     const resolveScope = (projectId: string): ChatScope =>
       mainSubModeEnabled ? MAIN_CHAT_SCOPE : toProjectScope(projectId);
+    const resolvedWeixinProjectId = resolveProjectId("");
+
+    await weixinChannelService.refresh({
+      scope: resolveScope(resolvedWeixinProjectId),
+      projectId: resolvedWeixinProjectId,
+    });
 
     const token = telegram.secret?.trim() ?? "";
     const resolvedTelegramProjectId = resolveProjectId("");
@@ -3072,6 +3221,15 @@ export const chatChannelService = {
           userIds: [],
         }),
         ready: feishuReady,
+      },
+      weixin: {
+        config: buildRuntimeSignature({
+          enabled: weixin.enabled,
+          token: weixin.accountId ?? "",
+          projectId: resolvedWeixinProjectId,
+          scopeType: mainSubModeEnabled ? "main" : "project",
+          userIds: [],
+        }),
       },
     });
     if (runtimeSignature === nextSignature) {

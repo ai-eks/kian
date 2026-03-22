@@ -7,7 +7,7 @@ export type AppType = 'react' | 'vue' | 'svelte' | 'nextjs' | 'nuxt' | 'angular'
 export type ProjectCreationSource = 'manual' | 'agent';
 export type ClaudeProvider = string;
 export type MediaProvider = 'fal';
-export type ChatChannelProvider = 'telegram' | 'discord' | 'feishu' | 'broadcast';
+export type ChatChannelProvider = 'telegram' | 'discord' | 'feishu' | 'weixin' | 'broadcast';
 export type BroadcastChannelType = 'feishu' | 'wechat';
 export type McpTransportType = 'stdio' | 'sse' | 'streamable-http';
 export type AppUpdateStage =
@@ -395,6 +395,7 @@ export interface OnboardingEnvironmentStatus {
   node: OnboardingDependencyStatus;
   pnpm: OnboardingDependencyStatus;
   claudeCode: OnboardingDependencyStatus;
+  codex: OnboardingDependencyStatus;
 }
 
 export interface ProviderModelDTO {
@@ -434,6 +435,49 @@ export interface FeishuChatChannelStatus {
   configured: boolean;
   appId: string;
   appSecret: string;
+}
+
+export type WeixinQrLoginStatus =
+  | 'wait'
+  | 'scaned'
+  | 'confirmed'
+  | 'expired'
+  | 'timeout'
+  | 'missing';
+
+export interface WeixinChatChannelAccountDTO {
+  accountId: string;
+  rawAccountId: string;
+  userId?: string;
+  savedAt: string;
+}
+
+export interface WeixinChatChannelQrSessionDTO {
+  sessionKey: string;
+  qrCodeUrl: string;
+  qrCodeImageSrc: string;
+  qrCodeValue: string;
+  startedAt: string;
+  expiresAt: string;
+}
+
+export interface WeixinQrLoginResultDTO {
+  connected: boolean;
+  status: WeixinQrLoginStatus;
+  message: string;
+  account?: WeixinChatChannelAccountDTO;
+}
+
+export interface WeixinChatChannelStatus {
+  provider: 'weixin';
+  enabled: boolean;
+  configured: boolean;
+  accountId: string;
+  activeAccountId: string | null;
+  availableAccounts: WeixinChatChannelAccountDTO[];
+  polling: boolean;
+  qrSession: WeixinChatChannelQrSessionDTO | null;
+  lastError: string | null;
 }
 
 export type LinkOpenMode = 'builtin' | 'system';

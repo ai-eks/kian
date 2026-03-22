@@ -42,6 +42,9 @@ import type {
   TaskDTO,
   TaskDetailDTO,
   TelegramChatChannelStatus,
+  WeixinChatChannelQrSessionDTO,
+  WeixinChatChannelStatus,
+  WeixinQrLoginResultDTO,
 } from "@shared/types";
 import { clipboard, contextBridge, ipcRenderer, webUtils } from "electron";
 
@@ -330,6 +333,23 @@ const api = {
       appId?: string;
       appSecret?: string;
     }) => invoke<boolean>("settings:saveFeishuChatChannelConfig", payload),
+    getWeixinChatChannelStatus: () =>
+      invoke<WeixinChatChannelStatus>("settings:getWeixinChatChannelStatus"),
+    saveWeixinChatChannelConfig: (payload: {
+      enabled: boolean;
+      accountId?: string;
+    }) => invoke<boolean>("settings:saveWeixinChatChannelConfig", payload),
+    startWeixinQrLogin: (payload?: {
+      forceRefresh?: boolean;
+    }) =>
+      invoke<WeixinChatChannelQrSessionDTO>("settings:startWeixinQrLogin", payload),
+    waitForWeixinQrLogin: (payload: {
+      sessionKey: string;
+      timeoutMs?: number;
+    }) =>
+      invoke<WeixinQrLoginResultDTO>("settings:waitForWeixinQrLogin", payload),
+    removeWeixinAccount: (payload: { accountId: string }) =>
+      invoke<boolean>("settings:removeWeixinAccount", payload),
     getBroadcastChannels: () =>
       invoke<BroadcastChannelDTO[]>("settings:getBroadcastChannels"),
     saveBroadcastChannelsConfig: (payload: {

@@ -81,6 +81,7 @@ const EN_US_EXACT: Record<string, string> = {
   "检查更新失败": "Failed to check for updates",
   "安装更新失败": "Failed to install update",
   "正在检查更新": "Checking for updates",
+  "正在加载...": "Loading...",
   "发现新版本": "New version available",
   "正在下载更新": "Downloading update",
   "正在校验更新包": "Verifying update package",
@@ -326,6 +327,7 @@ const KO_KR_EXACT: Record<string, string> = {
   "检查更新失败": "업데이트 확인 실패",
   "安装更新失败": "업데이트 설치 실패",
   "正在检查更新": "업데이트 확인 중",
+  "正在加载...": "불러오는 중...",
   "发现新版本": "새 버전 발견",
   "正在下载更新": "업데이트 다운로드 중",
   "正在校验更新包": "업데이트 패키지 검증 중",
@@ -480,6 +482,7 @@ const JA_JP_EXACT: Record<string, string> = {
   "检查更新失败": "更新の確認に失敗しました",
   "安装更新失败": "更新のインストールに失敗しました",
   "正在检查更新": "更新を確認中",
+  "正在加载...": "読み込み中...",
   "发现新版本": "新しいバージョンがあります",
   "正在下载更新": "更新をダウンロード中",
   "正在校验更新包": "更新パッケージを検証中",
@@ -631,6 +634,7 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "委派编号：": "Delegation ID:",
     "对话": "Chat",
     "展开": "Expand",
+    "收起": "Collapse",
     "工具输出": "Tool Output",
     "已完成": "Completed",
     "已自动保存": "Auto-saved",
@@ -766,6 +770,8 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
       "Please help me prepare Kian channel setup: first decide whether Telegram, Discord, or Feishu fits me best; then give me the shortest setup steps; finally guide me to complete the required fields and enable it in Settings > Channels.",
     "请帮我检查并安装 Node.js 与 pnpm。优先使用 nvm 安装 Node.js 24，再执行 corepack enable pnpm。完成后请验证 node -v 和 pnpm -v，并把执行结果发给我。":
       "Please help me check and install Node.js and pnpm. Prefer installing Node.js 24 with nvm, then run corepack enable pnpm. After that, verify node -v and pnpm -v, and send me the results.",
+    "帮我配置下语言模型。如果这是修改 Kian 自身配置，请使用 self-management 技能：先确认当前生效的配置文件和可用 Provider，再帮我完成必要的模型配置；修改完成后请调用 ReloadSettings，让新配置对快捷键、聊天通道和后续 Agent 会话立即生效。如果缺少必要信息，请先问我最少的问题。":
+      "Help me configure the language models. If this changes Kian's own settings, use the self-management skill: first confirm the active config files and available providers, then complete the necessary model setup. After editing, call ReloadSettings so the new configuration takes effect immediately for shortcuts, chat channels, and later agent sessions. If key information is missing, ask me only the minimum questions first.",
     "请至少启用一个模型": "Enable at least one model",
     "路径超出 Agent 工作区目录范围":
       "The path is outside the agent workspace",
@@ -934,9 +940,43 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "安装更新": "Install Update",
     "未安装": "Not Installed",
     "快速引导": "Quick Start",
+    "快速开始": "Quick Start",
+    "快速开始示例": "Quick Start Example",
     "完成基础环境后，你就可以把开发和协作任务交给 Kian。":
       "Once the basic environment is ready, you can hand development and collaboration tasks to Kian.",
+    "先完成模型配置，再用几个示例消息马上开始。":
+      "Configure the model first, then start immediately with a few example prompts.",
+    "环境检测": "Environment Check",
+    "确认本机依赖和渠道配置是否已准备就绪。":
+      "Check whether local dependencies and channel setup are ready.",
     "重新检测": "Recheck",
+    "配置模型": "Configure Model",
+    "先选择 Provider、填写 API Key，并启用至少一个可用模型。":
+      "Choose a provider, enter the API key, and enable at least one available model.",
+    "前往语言模型配置": "Open Language Model Settings",
+    "让 Kian 帮我配置": "Let Kian Configure It for Me",
+    "语言模型配置": "Language Model Setup",
+    "已向主 Agent 发送配置请求":
+      "Configuration request sent to the Main Agent",
+    "主 Agent 请求发送失败":
+      "Failed to send request to the Main Agent",
+    "开始聊天": "Start Chatting",
+    "如果不知道聊什么可以点击下面的消息快速体验下":
+      "If you are not sure what to chat about, try the messages below for a quick experience.",
+    "已向主 Agent 发送示例消息":
+      "Example message sent to the Main Agent",
+    "为我创建一个“我的野蛮女友”智能体，并让它出来给我讲个笑话。":
+      "Create a “My Sassy Girl” agent for me and have it come out and tell me a joke.",
+    "为我整理下电脑的下载文件夹":
+      "Organize the Downloads folder on my computer.",
+    "帮我网上调研下美国和伊朗战争的最新局势":
+      "Research the latest situation of the war between the United States and Iran online for me.",
+    "把你的主题调整为浅色模式":
+      "Switch your theme to light mode.",
+    "为我开发一个房贷计算器":
+      "Build a mortgage calculator for me.",
+    "为我开发一个大鱼吃小鱼的小游戏":
+      "Build a 大鱼吃小鱼 style mini game for me.",
     "主 Agent 入口": "Main Agent Entry",
     "主 Agent 会负责接待你，并在需要时把任务委派给对应的子智能体。":
       "The Main Agent greets you first and delegates tasks to the appropriate sub-agent when needed.",
@@ -951,9 +991,65 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "启用后，你可以把编程任务直接委托给 Kian，由它在对应 Agent 工作区中执行并反馈结果。":
       "Once enabled, you can delegate coding tasks directly to Kian, which will execute them in the corresponding agent workspace and report back.",
     "打开 Claude Code 文档": "Open Claude Code Docs",
+    "检测你当前系统里是否已安装 Codex CLI，便于后续需要时直接使用。":
+      "Check whether Codex CLI is installed on your system so it is ready when you need it.",
     "渠道配置": "Channel Setup",
     "启用后，你可以在手机端通过 IM 聊天工具远程控制 Kian。":
       "Once enabled, you can remotely control Kian from your phone through an IM chat tool.",
+    "微信": "WeChat",
+    "微信状态目录": "WeChat State Directory",
+    "留空时使用默认状态目录；二维码登录后的账号和轮询游标都会保存在这里。":
+      "Leave this empty to use the default state directory. Logged-in accounts and polling cursors from QR login are stored here.",
+    "已绑定微信账号": "Saved WeChat Account",
+    "扫码登录后会自动写入；也可以从已保存账号中切换。":
+      "The account is written automatically after QR login, and you can switch between saved accounts here.",
+    "启用微信前请先完成扫码登录":
+      "Complete WeChat QR login before enabling the channel",
+    "请选择已登录账号": "Select a signed-in account",
+    "实际状态目录": "Resolved State Directory",
+    "当前轮询账号": "Polling Account",
+    "轮询状态": "Polling Status",
+    "未连接": "Not Connected",
+    "微信登录": "WeChat Login",
+    "刷新二维码": "Refresh QR Code",
+    "开始微信扫码登录": "Start WeChat QR Login",
+    "等待微信登录确认": "Wait for WeChat Login Confirmation",
+    "微信登录二维码已刷新": "WeChat login QR code refreshed",
+    "启动微信扫码登录失败": "Failed to start WeChat QR login",
+    "请先开始微信扫码登录": "Start WeChat QR login first",
+    "微信账号登录成功": "WeChat account logged in successfully",
+    "微信登录尚未完成": "WeChat login is not finished yet",
+    "等待微信登录确认失败":
+      "Failed to wait for WeChat login confirmation",
+    "微信登录二维码": "WeChat Login QR Code",
+    "点击“微信登录”生成二维码，用微信扫码完成登录。":
+      "Click “WeChat Login” to generate a QR code, then scan it with WeChat to sign in.",
+    "用微信扫描下方二维码，系统会自动等待登录确认并完成账号写入。":
+      "Scan the QR code below with WeChat. Kian will automatically wait for login confirmation and finish saving the account.",
+    "微信账号已删除": "WeChat account deleted",
+    "删除微信账号失败": "Failed to delete WeChat account",
+    "激活": "Activate",
+    "已激活": "Active",
+    "激活微信账号失败": "Failed to activate WeChat account",
+    "暂无已绑定微信账号": "No saved WeChat accounts yet",
+    "用微信扫描下方二维码后，再点击“等待微信登录确认”完成账号写入。":
+      "Scan the QR code below with WeChat, then click “Wait for WeChat Login Confirmation” to finish saving the account.",
+    "会话 Key": "Session Key",
+    "二维码过期时间": "QR Code Expiration",
+    "最近一次微信错误": "Latest WeChat Error",
+    "微信接入方式指引": "WeChat Setup Guide",
+    "1. 点击“刷新二维码”生成新的登录二维码，并用微信扫描。":
+      "1. Click “Refresh QR Code” to generate a new login QR code, then scan it with WeChat.",
+    "2. 扫码后系统会自动等待登录确认，成功后会回到初始状态。":
+      "2. After scanning, the app will automatically wait for login confirmation and return to the initial state once it succeeds.",
+    "1. 先点击“开始微信扫码登录”，用微信扫描二维码。":
+      "1. Click “Start WeChat QR Login” first, then scan the QR code with WeChat.",
+    "2. 扫码后点击“等待微信登录确认”，系统会把账号写入本地状态目录。":
+      "2. After scanning, click “Wait for WeChat Login Confirmation” and the account will be written to the local state directory.",
+    "3. 选择要启用的 accountId，保存后主进程会自动启动长轮询。":
+      "3. Select the accountId to enable. After saving, the main process starts long polling automatically.",
+    "4. 当前 MVP 仅支持文本消息收发，媒体消息后续再补。":
+      "4. The current MVP only supports text send/receive. Media support will be added later.",
     "已配置": "Configured",
     "未配置": "Not Configured",
     "图像生成（高质量文生图），适合角色设定图、海报风格镜头和高细节概念图。":
@@ -1251,6 +1347,8 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
       "Kian 채널 설정 준비를 도와주세요. 먼저 Telegram, Discord, Feishu 중 무엇이 더 적합한지 판단하고, 가장 짧은 설정 절차를 제시한 뒤, 설정 > 채널에서 필수 항목을 입력하고 활성화하도록 안내해 주세요.",
     "请帮我检查并安装 Node.js 与 pnpm。优先使用 nvm 安装 Node.js 24，再执行 corepack enable pnpm。完成后请验证 node -v 和 pnpm -v，并把执行结果发给我。":
       "Node.js와 pnpm 설치를 확인하고 도와주세요. 우선 nvm으로 Node.js 24를 설치한 뒤 corepack enable pnpm을 실행해 주세요. 완료 후 node -v와 pnpm -v를 확인하고 결과를 보내 주세요.",
+    "帮我配置下语言模型。如果这是修改 Kian 自身配置，请使用 self-management 技能：先确认当前生效的配置文件和可用 Provider，再帮我完成必要的模型配置；修改完成后请调用 ReloadSettings，让新配置对快捷键、聊天通道和后续 Agent 会话立即生效。如果缺少必要信息，请先问我最少的问题。":
+      "언어 모델 설정을 도와주세요. Kian 자체 설정을 바꾸는 작업이라면 self-management 스킬을 사용해 현재 실제로 적용되는 설정 파일과 사용 가능한 Provider를 먼저 확인한 뒤 필요한 모델 설정을 완료해 주세요. 수정이 끝나면 ReloadSettings를 호출해 새 설정이 단축키, 채팅 채널, 이후 Agent 세션에 즉시 반영되게 해 주세요. 필요한 정보가 부족하면 먼저 최소한의 질문만 해 주세요.",
     "请至少启用一个模型": "모델을 하나 이상 활성화하세요",
     "请输入启动命令": "시작 명령을 입력하세요",
     "请输入服务 URL": "서비스 URL을 입력하세요",
@@ -1290,6 +1388,7 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "仓库技能": "저장소 스킬",
     "同步元信息": "메타데이터 동기화",
     "重试": "다시 시도",
+    "收起": "접기",
     "管理已安装的技能，可控制主 Agent / 子智能体的可见性，并卸载不需要的技能（内置技能不可卸载）。":
       "설치된 스킬을 관리하고, 메인 에이전트와 하위 에이전트의 표시 여부를 제어하며, 필요 없는 스킬을 제거할 수 있습니다(내장 스킬은 제거할 수 없습니다).",
     "内置仓库来自仓库目录 skills/repositories.json。你也可以添加自定义 GitHub 仓库。":
@@ -1437,9 +1536,43 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "安装更新": "업데이트 설치",
     "未安装": "설치되지 않음",
     "快速引导": "빠른 가이드",
+    "快速开始": "빠른 시작",
+    "快速开始示例": "빠른 시작 예시",
     "完成基础环境后，你就可以把开发和协作任务交给 Kian。":
       "기본 환경이 준비되면 개발과 협업 작업을 Kian에게 맡길 수 있습니다.",
+    "先完成模型配置，再用几个示例消息马上开始。":
+      "먼저 모델 설정을 마친 뒤 몇 개의 예시 메시지로 바로 시작하세요.",
+    "环境检测": "환경 점검",
+    "确认本机依赖和渠道配置是否已准备就绪。":
+      "로컬 의존성과 채널 설정이 준비되었는지 확인합니다.",
     "重新检测": "다시 검사",
+    "配置模型": "모델 설정",
+    "先选择 Provider、填写 API Key，并启用至少一个可用模型。":
+      "먼저 Provider를 선택하고 API Key를 입력한 뒤 사용할 모델을 하나 이상 활성화하세요.",
+    "前往语言模型配置": "언어 모델 설정으로 이동",
+    "让 Kian 帮我配置": "Kian에게 설정 맡기기",
+    "语言模型配置": "언어 모델 설정",
+    "已向主 Agent 发送配置请求":
+      "메인 에이전트에 설정 요청을 보냈습니다",
+    "主 Agent 请求发送失败":
+      "메인 에이전트로 요청을 보내지 못했습니다",
+    "开始聊天": "채팅 시작",
+    "如果不知道聊什么可以点击下面的消息快速体验下":
+      "무슨 대화를 시작할지 모르겠다면 아래 메시지를 눌러 빠르게 체험해 보세요.",
+    "已向主 Agent 发送示例消息":
+      "예시 메시지를 메인 에이전트에 보냈습니다",
+    "为我创建一个“我的野蛮女友”智能体，并让它出来给我讲个笑话。":
+      "‘엽기적인 그녀’ 에이전트를 하나 만들어 주고, 나와서 농담도 하나 해 줘.",
+    "为我整理下电脑的下载文件夹":
+      "내 컴퓨터의 다운로드 폴더를 정리해 줘.",
+    "帮我网上调研下美国和伊朗战争的最新局势":
+      "미국과 이란 전쟁의 최신 상황을 온라인으로 조사해 줘.",
+    "把你的主题调整为浅色模式":
+      "테마를 라이트 모드로 바꿔 줘.",
+    "为我开发一个房贷计算器":
+      "주택담보대출 계산기를 만들어 줘.",
+    "为我开发一个大鱼吃小鱼的小游戏":
+      "큰 물고기가 작은 물고기를 먹는 미니게임을 만들어 줘.",
     "主 Agent 入口": "메인 에이전트 입구",
     "主 Agent 会负责接待你，并在需要时把任务委派给对应的子智能体。":
       "메인 에이전트가 먼저 응대하고, 필요할 때 적절한 하위 에이전트에게 작업을 위임합니다.",
@@ -1454,9 +1587,64 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "启用后，你可以把编程任务直接委托给 Kian，由它在对应 Agent 工作区中执行并反馈结果。":
       "활성화하면 프로그래밍 작업을 Kian에게 직접 위임할 수 있고, 해당 에이전트 작업공간에서 실행한 뒤 결과를 알려 줍니다.",
     "打开 Claude Code 文档": "Claude Code 문서 열기",
+    "检测你当前系统里是否已安装 Codex CLI，便于后续需要时直接使用。":
+      "현재 시스템에 Codex CLI가 설치되어 있는지 확인해 필요할 때 바로 사용할 수 있게 합니다.",
     "渠道配置": "채널 설정",
     "启用后，你可以在手机端通过 IM 聊天工具远程控制 Kian。":
       "활성화하면 휴대폰에서 IM 채팅 도구를 통해 Kian을 원격으로 제어할 수 있습니다.",
+    "微信": "위챗",
+    "微信状态目录": "위챗 상태 디렉터리",
+    "留空时使用默认状态目录；二维码登录后的账号和轮询游标都会保存在这里。":
+      "비워 두면 기본 상태 디렉터리를 사용합니다. QR 로그인 후 계정과 폴링 커서는 여기에 저장됩니다.",
+    "已绑定微信账号": "저장된 위챗 계정",
+    "扫码登录后会自动写入；也可以从已保存账号中切换。":
+      "QR 로그인 후 자동으로 저장되며, 여기서 저장된 계정으로 전환할 수도 있습니다.",
+    "启用微信前请先完成扫码登录":
+      "위챗 채널을 켜기 전에 QR 로그인을 먼저 완료하세요",
+    "请选择已登录账号": "로그인된 계정을 선택하세요",
+    "实际状态目录": "실제 상태 디렉터리",
+    "当前轮询账号": "현재 폴링 계정",
+    "轮询状态": "폴링 상태",
+    "未连接": "연결 안 됨",
+    "微信登录": "위챗 로그인",
+    "刷新二维码": "QR 코드 새로고침",
+    "开始微信扫码登录": "위챗 QR 로그인 시작",
+    "等待微信登录确认": "위챗 로그인 확인 대기",
+    "微信登录二维码已刷新": "위챗 로그인 QR 코드가 새로고침되었습니다",
+    "启动微信扫码登录失败": "위챗 QR 로그인을 시작하지 못했습니다",
+    "请先开始微信扫码登录": "먼저 위챗 QR 로그인을 시작하세요",
+    "微信账号登录成功": "위챗 계정 로그인에 성공했습니다",
+    "微信登录尚未完成": "위챗 로그인이 아직 완료되지 않았습니다",
+    "等待微信登录确认失败": "위챗 로그인 확인 대기에 실패했습니다",
+    "微信登录二维码": "위챗 로그인 QR 코드",
+    "点击“微信登录”生成二维码，用微信扫码完成登录。":
+      "“위챗 로그인”을 눌러 QR 코드를 생성한 뒤 위챗으로 스캔해 로그인하세요.",
+    "用微信扫描下方二维码，系统会自动等待登录确认并完成账号写入。":
+      "위챗으로 아래 QR 코드를 스캔하면 시스템이 자동으로 로그인 확인을 기다리고 계정 저장을 완료합니다.",
+    "微信账号已删除": "위챗 계정을 삭제했습니다",
+    "删除微信账号失败": "위챗 계정을 삭제하지 못했습니다",
+    "激活": "활성화",
+    "已激活": "활성화됨",
+    "激活微信账号失败": "위챗 계정을 활성화하지 못했습니다",
+    "暂无已绑定微信账号": "저장된 위챗 계정이 없습니다",
+    "用微信扫描下方二维码后，再点击“等待微信登录确认”完成账号写入。":
+      "위챗으로 아래 QR 코드를 스캔한 뒤 “위챗 로그인 확인 대기”를 눌러 계정 저장을 완료하세요.",
+    "会话 Key": "세션 키",
+    "二维码过期时间": "QR 코드 만료 시간",
+    "最近一次微信错误": "최근 위챗 오류",
+    "微信接入方式指引": "위챗 연동 가이드",
+    "1. 点击“刷新二维码”生成新的登录二维码，并用微信扫描。":
+      "1. “QR 코드 새로고침”을 눌러 새 로그인 QR 코드를 만든 뒤 위챗으로 스캔하세요.",
+    "2. 扫码后系统会自动等待登录确认，成功后会回到初始状态。":
+      "2. 스캔 후 시스템이 자동으로 로그인 확인을 기다리며, 성공하면 초기 상태로 돌아갑니다.",
+    "1. 先点击“开始微信扫码登录”，用微信扫描二维码。":
+      "1. 먼저 “위챗 QR 로그인 시작”을 누르고 위챗으로 QR 코드를 스캔하세요.",
+    "2. 扫码后点击“等待微信登录确认”，系统会把账号写入本地状态目录。":
+      "2. 스캔 후 “위챗 로그인 확인 대기”를 누르면 계정이 로컬 상태 디렉터리에 저장됩니다.",
+    "3. 选择要启用的 accountId，保存后主进程会自动启动长轮询。":
+      "3. 사용할 accountId를 선택하세요. 저장하면 메인 프로세스가 자동으로 장기 폴링을 시작합니다.",
+    "4. 当前 MVP 仅支持文本消息收发，媒体消息后续再补。":
+      "4. 현재 MVP는 텍스트 메시지 송수신만 지원하며, 미디어는 이후 추가됩니다.",
     "已配置": "설정됨",
     "未配置": "미설정",
     "图像生成（高质量文生图），适合角色设定图、海报风格镜头和高细节概念图。":
@@ -1755,6 +1943,8 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
       "Kian のチャネル設定準備を手伝ってください。まず Telegram、Discord、Feishu のどれが適しているか判断し、最短の設定手順を示し、最後に設定 > チャネルで必須項目を入力して有効化するよう案内してください。",
     "请帮我检查并安装 Node.js 与 pnpm。优先使用 nvm 安装 Node.js 24，再执行 corepack enable pnpm。完成后请验证 node -v 和 pnpm -v，并把执行结果发给我。":
       "Node.js と pnpm の確認とインストールを手伝ってください。まず nvm で Node.js 24 をインストールし、その後 corepack enable pnpm を実行してください。完了したら node -v と pnpm -v を確認し、結果を送ってください。",
+    "帮我配置下语言模型。如果这是修改 Kian 自身配置，请使用 self-management 技能：先确认当前生效的配置文件和可用 Provider，再帮我完成必要的模型配置；修改完成后请调用 ReloadSettings，让新配置对快捷键、聊天通道和后续 Agent 会话立即生效。如果缺少必要信息，请先问我最少的问题。":
+      "言語モデルの設定を手伝ってください。Kian 自身の設定を変更する作業なら self-management スキルを使い、現在有効な設定ファイルと利用可能な Provider を先に確認してから必要なモデル設定を完了してください。変更後は ReloadSettings を呼び出し、新しい設定がショートカット、チャットチャネル、以後の Agent セッションにすぐ反映されるようにしてください。必要な情報が足りなければ、まず最小限の質問だけしてください。",
     "请至少启用一个模型": "少なくとも 1 つのモデルを有効化してください",
     "请输入启动命令": "起動コマンドを入力してください",
     "请输入服务 URL": "サービス URL を入力してください",
@@ -1794,6 +1984,7 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "仓库技能": "リポジトリスキル",
     "同步元信息": "メタデータを同期",
     "重试": "再試行",
+    "收起": "折りたたむ",
     "管理已安装的技能，可控制主 Agent / 子智能体的可见性，并卸载不需要的技能（内置技能不可卸载）。":
       "インストール済みスキルを管理し、メインエージェントとサブエージェントの表示可否を切り替え、不要なスキルをアンインストールできます（内蔵スキルは削除できません）。",
     "内置仓库来自仓库目录 skills/repositories.json。你也可以添加自定义 GitHub 仓库。":
@@ -1935,9 +2126,43 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "安装更新": "アップデートをインストール",
     "未安装": "未インストール",
     "快速引导": "クイックガイド",
+    "快速开始": "クイックスタート",
+    "快速开始示例": "クイックスタート例",
     "完成基础环境后，你就可以把开发和协作任务交给 Kian。":
       "基本環境の準備が終われば、開発や共同作業のタスクを Kian に任せられます。",
+    "先完成模型配置，再用几个示例消息马上开始。":
+      "まずモデル設定を済ませ、そのあといくつかのサンプルメッセージですぐ始められます。",
+    "环境检测": "環境チェック",
+    "确认本机依赖和渠道配置是否已准备就绪。":
+      "ローカル依存関係とチャネル設定の準備状況を確認します。",
     "重新检测": "再チェック",
+    "配置模型": "モデル設定",
+    "先选择 Provider、填写 API Key，并启用至少一个可用模型。":
+      "最初に Provider を選び、API Key を入力し、利用するモデルを少なくとも 1 つ有効にしてください。",
+    "前往语言模型配置": "言語モデル設定を開く",
+    "让 Kian 帮我配置": "Kian に設定してもらう",
+    "语言模型配置": "言語モデル設定",
+    "已向主 Agent 发送配置请求":
+      "メインエージェントへ設定リクエストを送信しました",
+    "主 Agent 请求发送失败":
+      "メインエージェントへのリクエスト送信に失敗しました",
+    "开始聊天": "チャットを始める",
+    "如果不知道聊什么可以点击下面的消息快速体验下":
+      "何を話せばよいかわからない場合は、下のメッセージをクリックしてすぐ試せます。",
+    "已向主 Agent 发送示例消息":
+      "サンプルメッセージをメインエージェントに送信しました",
+    "为我创建一个“我的野蛮女友”智能体，并让它出来给我讲个笑话。":
+      "「猟奇的な彼女」エージェントを作って、出てきてジョークをひとつ話して。",
+    "为我整理下电脑的下载文件夹":
+      "パソコンのダウンロードフォルダを整理して。",
+    "帮我网上调研下美国和伊朗战争的最新局势":
+      "アメリカとイランの戦争の最新情勢をネットで調べて。",
+    "把你的主题调整为浅色模式":
+      "テーマをライトモードに切り替えて。",
+    "为我开发一个房贷计算器":
+      "住宅ローン計算機を作って。",
+    "为我开发一个大鱼吃小鱼的小游戏":
+      "大きな魚が小さな魚を食べるミニゲームを作って。",
     "主 Agent 入口": "メインエージェント入口",
     "主 Agent 会负责接待你，并在需要时把任务委派给对应的子智能体。":
       "メインエージェントが最初に応対し、必要に応じて適切なサブエージェントへタスクを委譲します。",
@@ -1952,9 +2177,64 @@ const EXTRA_EXACT_TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     "启用后，你可以把编程任务直接委托给 Kian，由它在对应 Agent 工作区中执行并反馈结果。":
       "有効化すると、プログラミング作業を Kian に直接委任でき、対応するエージェントのワークスペースで実行して結果を返してくれます。",
     "打开 Claude Code 文档": "Claude Code ドキュメントを開く",
+    "检测你当前系统里是否已安装 Codex CLI，便于后续需要时直接使用。":
+      "現在のシステムに Codex CLI がインストールされているかを確認し、必要なときにすぐ使えるようにします。",
     "渠道配置": "チャネル設定",
     "启用后，你可以在手机端通过 IM 聊天工具远程控制 Kian。":
       "有効化すると、スマートフォンの IM チャットツールから Kian を遠隔操作できます。",
+    "微信": "WeChat",
+    "微信状态目录": "WeChat 状態ディレクトリ",
+    "留空时使用默认状态目录；二维码登录后的账号和轮询游标都会保存在这里。":
+      "空欄なら既定の状態ディレクトリを使います。QR ログイン後のアカウントとポーリングカーソルはここに保存されます。",
+    "已绑定微信账号": "保存済み WeChat アカウント",
+    "扫码登录后会自动写入；也可以从已保存账号中切换。":
+      "QR ログイン後に自動保存され、保存済みアカウントへの切り替えもここで行えます。",
+    "启用微信前请先完成扫码登录":
+      "WeChat チャネルを有効にする前に QR ログインを完了してください",
+    "请选择已登录账号": "ログイン済みアカウントを選択",
+    "实际状态目录": "実際の状態ディレクトリ",
+    "当前轮询账号": "現在のポーリングアカウント",
+    "轮询状态": "ポーリング状態",
+    "未连接": "未接続",
+    "微信登录": "WeChat ログイン",
+    "刷新二维码": "QR コードを更新",
+    "开始微信扫码登录": "WeChat QR ログインを開始",
+    "等待微信登录确认": "WeChat ログイン確認を待機",
+    "微信登录二维码已刷新": "WeChat ログイン QR コードを更新しました",
+    "启动微信扫码登录失败": "WeChat QR ログインの開始に失敗しました",
+    "请先开始微信扫码登录": "先に WeChat QR ログインを開始してください",
+    "微信账号登录成功": "WeChat アカウントのログインに成功しました",
+    "微信登录尚未完成": "WeChat ログインはまだ完了していません",
+    "等待微信登录确认失败": "WeChat ログイン確認の待機に失敗しました",
+    "微信登录二维码": "WeChat ログイン QR コード",
+    "点击“微信登录”生成二维码，用微信扫码完成登录。":
+      "「WeChat ログイン」をクリックして QR コードを生成し、WeChat でスキャンしてログインしてください。",
+    "用微信扫描下方二维码，系统会自动等待登录确认并完成账号写入。":
+      "下の QR コードを WeChat でスキャンすると、システムが自動でログイン確認を待機し、アカウント保存まで完了します。",
+    "微信账号已删除": "WeChat アカウントを削除しました",
+    "删除微信账号失败": "WeChat アカウントの削除に失敗しました",
+    "激活": "有効化",
+    "已激活": "有効中",
+    "激活微信账号失败": "WeChat アカウントの有効化に失敗しました",
+    "暂无已绑定微信账号": "保存済み WeChat アカウントはまだありません",
+    "用微信扫描下方二维码后，再点击“等待微信登录确认”完成账号写入。":
+      "WeChat で下の QR コードをスキャンしたあと、「WeChat ログイン確認を待機」をクリックしてアカウント保存を完了してください。",
+    "会话 Key": "セッションキー",
+    "二维码过期时间": "QR コード有効期限",
+    "最近一次微信错误": "直近の WeChat エラー",
+    "微信接入方式指引": "WeChat 連携ガイド",
+    "1. 点击“刷新二维码”生成新的登录二维码，并用微信扫描。":
+      "1. 「QR コードを更新」をクリックして新しいログイン QR コードを生成し、WeChat でスキャンします。",
+    "2. 扫码后系统会自动等待登录确认，成功后会回到初始状态。":
+      "2. スキャン後はシステムが自動でログイン確認を待機し、成功すると初期状態に戻ります。",
+    "1. 先点击“开始微信扫码登录”，用微信扫描二维码。":
+      "1. まず「WeChat QR ログインを開始」をクリックし、WeChat で QR コードをスキャンします。",
+    "2. 扫码后点击“等待微信登录确认”，系统会把账号写入本地状态目录。":
+      "2. スキャン後に「WeChat ログイン確認を待機」をクリックすると、アカウントがローカル状態ディレクトリに保存されます。",
+    "3. 选择要启用的 accountId，保存后主进程会自动启动长轮询。":
+      "3. 有効にする accountId を選択してください。保存後、メインプロセスが自動でロングポーリングを開始します。",
+    "4. 当前 MVP 仅支持文本消息收发，媒体消息后续再补。":
+      "4. 現在の MVP はテキストメッセージ送受信のみ対応しており、メディアは後続で追加します。",
     "已配置": "設定済み",
     "未配置": "未設定",
     "图像生成（高质量文生图），适合角色设定图、海报风格镜头和高细节概念图。":

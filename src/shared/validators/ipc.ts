@@ -295,6 +295,7 @@ const feishuAppSecretSchema = z
   .trim()
   .optional()
   .transform((v) => (v && v.length > 0 ? v : undefined));
+const weixinAccountIdSchema = z.string().trim().max(200).optional();
 const feishuWebhookSchema = z
   .string()
   .trim()
@@ -330,6 +331,24 @@ export const saveFeishuChatChannelConfigSchema = z.object({
   enabled: z.boolean().default(false),
   appId: feishuAppIdSchema,
   appSecret: feishuAppSecretSchema
+});
+
+export const saveWeixinChatChannelConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  accountId: weixinAccountIdSchema
+});
+
+export const startWeixinQrLoginSchema = z.object({
+  forceRefresh: z.boolean().optional()
+});
+
+export const waitForWeixinQrLoginSchema = z.object({
+  sessionKey: z.string().trim().min(1),
+  timeoutMs: z.number().int().positive().max(30 * 60 * 1000).optional()
+});
+
+export const removeWeixinAccountSchema = z.object({
+  accountId: z.string().trim().min(1).max(200)
 });
 
 export const saveBroadcastChannelConfigSchema = z.object({

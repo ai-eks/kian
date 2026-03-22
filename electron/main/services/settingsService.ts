@@ -101,6 +101,11 @@ interface FeishuChatChannelSettings extends BotChatChannelSettings {
   appSecret: string;
 }
 
+interface WeixinChatChannelSettings {
+  enabled: boolean;
+  accountId: string;
+}
+
 interface BroadcastChannelSettings {
   id: string;
   name: string;
@@ -158,6 +163,7 @@ interface SettingsFile {
     telegram: TelegramChatChannelSettings;
     discord: DiscordChatChannelSettings;
     feishu: FeishuChatChannelSettings;
+    weixin: WeixinChatChannelSettings;
     broadcastChannels: BroadcastChannelSettings[];
   };
 }
@@ -177,6 +183,7 @@ interface LegacySettingsFile {
     telegram?: LegacyTelegramChatChannelSettings;
     discord?: LegacyDiscordChatChannelSettings;
     feishu?: LegacyBotChatChannelSettings & { appId?: string; appSecret?: string };
+    weixin?: Partial<WeixinChatChannelSettings>;
     broadcastChannels?: unknown;
     broadcast?: LegacyBroadcastChannelSettings;
   };
@@ -202,6 +209,10 @@ const DEFAULT_FEISHU_CHAT_CHANNEL: FeishuChatChannelSettings = {
   userIds: [],
   appId: "",
   appSecret: "",
+};
+const DEFAULT_WEIXIN_CHAT_CHANNEL: WeixinChatChannelSettings = {
+  enabled: false,
+  accountId: "",
 };
 const DEFAULT_BROADCAST_CHANNELS: BroadcastChannelSettings[] = [];
 const DEFAULT_GENERAL_CONFIG_FLAGS = {
@@ -858,6 +869,7 @@ const normalizeSettingsFile = (
   const telegramRaw = raw?.chatChannels?.telegram;
   const discordRaw = raw?.chatChannels?.discord;
   const feishuRaw = raw?.chatChannels?.feishu;
+  const weixinRaw = raw?.chatChannels?.weixin;
   const broadcastChannelsRaw = normalizeBroadcastChannels(
     raw?.chatChannels?.broadcastChannels,
   );
@@ -935,6 +947,13 @@ const normalizeSettingsFile = (
         userIds: feishuUserIds.length > 0 ? feishuUserIds : legacyFeishuUserIds,
         appId: normalizeSecretValue(feishuRaw?.appId),
         appSecret: normalizeSecretValue(feishuRaw?.appSecret),
+      },
+      weixin: {
+        enabled:
+          typeof weixinRaw?.enabled === "boolean"
+            ? weixinRaw.enabled
+            : DEFAULT_WEIXIN_CHAT_CHANNEL.enabled,
+        accountId: normalizeSecretValue(weixinRaw?.accountId),
       },
       broadcastChannels,
     },
@@ -1616,6 +1635,40 @@ export const settingsService = {
       configured: Boolean(credentials.appId && credentials.appSecret),
       appId: credentials.appId,
       appSecret: credentials.appSecret,
+    };
+  },
+
+  async saveWeixinChatChannelConfig(input: {
+    enabled: boolean;
+    accountId?: string;
+  }): Promise<void> {
+    await withSettingsWriteLock(async () => {
+      const settings = await readSettingsFile();
+      await writeSettingsFile({
+        ...settings,
+        chatChannels: {
+          ...settings.chatChannels,
+          weixin: {
+            ...settings.chatChannels.weixin,
+            enabled: input.enabled,
+            accountId:
+              input.accountId !== undefined
+                ? normalizeSecretValue(input.accountId)
+                : settings.chatChannels.weixin.accountId,
+          },
+        },
+      });
+    });
+  },
+
+  async getWeixinChatChannelRuntime(): Promise<{
+    enabled: boolean;
+    accountId: string | null;
+  }> {
+    const settings = await readSettingsFile();
+    return {
+      enabled: settings.chatChannels.weixin.enabled,
+      accountId: settings.chatChannels.weixin.accountId || null,
     };
   },
 
